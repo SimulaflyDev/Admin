@@ -1,0 +1,13 @@
+{
+  "title": "Privacy Policy",
+  "subtitle": "Dummy Privacy Policy",
+  "appTarget": "All users",
+  "metadata": ["Version 1.0", "Effective from today"],
+  "sections": [
+    {
+      "number": 1,
+      "title": "Introduction",
+      "lines": ["This is a dummy privacy policy for development."]
+    }
+  ]
+}

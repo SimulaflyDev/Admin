@@ -274,7 +274,7 @@ export default function SupportHub() {
           <div className="p-6 border-t border-slate-200 bg-white">
             {/* Quick Actions */}
             <div className="flex gap-2 mb-4">
-              <Select onValueChange={(v: string) => setReplyText(v)}>
+              <Select onValueChange={(v: string | null) => setReplyText(v || "")}>
                 <SelectTrigger className="h-9 text-sm font-medium flex-1"><SelectValue placeholder="Insert Canned Response..." /></SelectTrigger>
                 <SelectContent>
                   {cannedResponses.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
