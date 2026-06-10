@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SimulaFly Admin - Login</title>
+    <link rel="stylesheet" href="layout.css">
+</head>
+<body>
+    <div class="auth-wrapper">
+        <div class="auth-box">
+            <div class="auth-logo">SimulaFly Admin OS</div>
+            
+            <form action="role-selection.html" method="GET">
+                <div class="form-group">
+                    <label>Email / Phone</label>
+                    <input type="text" placeholder="Enter your credentials" required>
+                </div>
+                
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" placeholder="Enter password" required>
+                </div>
+
+                <div class="form-group">
+                    <label>OTP Code (2FA)</label>
+                    <input type="text" placeholder="Optional OTP">
+                </div>
+
+                <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">Login</button>
+                
+                <div style="text-align: center; margin-top: 15px; font-size: 0.85rem;">
+                    <a href="#">Forgot Password?</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

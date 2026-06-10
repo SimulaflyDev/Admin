@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alert Center - SimulaFly Admin</title>
+    <link rel="stylesheet" href="layout.css">
+</head>
+<body>
+    <aside class="sidebar">
+        <div class="sidebar-header">SimulaFly Admin</div>
+        <ul class="nav-menu">
+            <div class="nav-section">Company Command</div>
+            <li class="nav-item"><a href="executive-dashboard.html">Executive Dashboard</a></li>
+            <li class="nav-item"><a href="realtime-operations.html">Realtime Activity</a></li>
+            <li class="nav-item active"><a href="alert-center.html">Alert Center</a></li>
+            
+            <div class="nav-section">Operations</div>
+            <li class="nav-item"><a href="#">User Directory</a></li>
+            <li class="nav-item"><a href="#">Merchant Directory</a></li>
+            <li class="nav-item"><a href="#">Store Management</a></li>
+            <li class="nav-item"><a href="#">Products</a></li>
+            <li class="nav-item"><a href="#">Orders & Bookings</a></li>
+        </ul>
+    </aside>
+
+    <div class="main-wrapper">
+        <header class="top-header">
+            <div class="header-search">
+                <input type="text" placeholder="Search alerts...">
+            </div>
+            <div class="header-actions">
+                <span>Org: Global (Super Admin)</span>
+                <button class="btn btn-secondary">Notifications (3)</button>
+                <button class="btn btn-secondary">Logout</button>
+            </div>
+        </header>
+
+        <div class="page-header">
+            <div class="breadcrumb">Company Command Center > Incident & Alert Center</div>
+            <h1 class="page-title">Alert & Incident Center</h1>
+        </div>
+
+        <div class="content-area">
+            
+            <!-- Filters -->
+            <div class="data-table-container" style="padding: 15px; margin-bottom: 20px; display: flex; gap: 15px; align-items: center;">
+                <strong>Filters:</strong>
+                <select class="btn btn-secondary">
+                    <option>Status: New & Acknowledged</option>
+                    <option>Status: Closed</option>
+                </select>
+                <select class="btn btn-secondary">
+                    <option>Category: All</option>
+                    <option>Payments</option>
+                    <option>AI Operations</option>
+                    <option>Orders</option>
+                    <option>System</option>
+                </select>
+            </div>
+
+            <!-- Alerts Table -->
+            <div class="data-table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Alert Type / Category</th>
+                            <th>Severity</th>
+                            <th>Time</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>
+                                <strong>Payment Failure Spike</strong><br>
+                                <span style="font-size: 0.85rem; color: #666;">Gateway: Razorpay, 12 failures in last 5 mins</span>
+                            </td>
+                            <td><span class="badge badge-danger">Critical</span></td>
+                            <td>10:42 AM</td>
+                            <td><span class="badge badge-warning">New</span></td>
+                            <td>
+                                <button class="btn btn-primary" style="padding: 5px 10px; font-size: 0.85rem;">Acknowledge</button>
+                                <button class="btn btn-secondary" style="padding: 5px 10px; font-size: 0.85rem;">Details</button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>
+                                <strong>Merchant Low Wallet Balance</strong><br>
+                                <span style="font-size: 0.85rem; color: #666;">Store: SneakerHead India (Balance < ₹500)</span>
+                            </td>
+                            <td><span class="badge" style="background:#fff8e1; color:#f57f17;">Warning</span></td>
+                            <td>10:15 AM</td>
+                            <td><span class="badge badge-warning">New</span></td>
+                            <td>
+                                <button class="btn btn-primary" style="padding: 5px 10px; font-size: 0.85rem;">Acknowledge</button>
+                                <button class="btn btn-secondary" style="padding: 5px 10px; font-size: 0.85rem;">Details</button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>
+                                <strong>SLA Breach: Consumer Support</strong><br>
+                                <span style="font-size: 0.85rem; color: #666;">Ticket #8890 unassigned for > 2 hours</span>
+                            </td>
+                            <td><span class="badge badge-danger">Critical</span></td>
+                            <td>09:30 AM</td>
+                            <td><span class="badge" style="background:#e3f2fd; color:#1976d2;">Acknowledged</span></td>
+                            <td>
+                                <button class="btn btn-primary" style="padding: 5px 10px; font-size: 0.85rem;">Resolve</button>
+                                <button class="btn btn-secondary" style="padding: 5px 10px; font-size: 0.85rem;">Details</button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+        </div>
+    </div>
+</body>
+</html>

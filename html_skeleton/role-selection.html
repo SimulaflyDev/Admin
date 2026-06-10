@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SimulaFly Admin - Role Selection</title>
+    <link rel="stylesheet" href="layout.css">
+    <style>
+        .role-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .role-card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.2s;
+        }
+        .role-card:hover {
+            border-color: #0066cc;
+            background-color: #f0f8ff;
+        }
+        .role-card.selected {
+            border-color: #0066cc;
+            background-color: #e6f2ff;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="auth-wrapper">
+        <div class="auth-box" style="max-width: 500px;">
+            <div class="auth-logo">Select Your Role</div>
+            <p style="text-align: center; color: #666; margin-bottom: 20px;">
+                Your account has multiple access contexts. Please select one to proceed.
+            </p>
+            
+            <form action="executive-dashboard.html" method="GET">
+                <div class="role-grid">
+                    <div class="role-card selected">
+                        <div>🏢</div>
+                        <div>Org Manager</div>
+                    </div>
+                    <div class="role-card">
+                        <div>🎧</div>
+                        <div>Customer Support</div>
+                    </div>
+                    <div class="role-card">
+                        <div>⚙️</div>
+                        <div>Operations</div>
+                    </div>
+                    <div class="role-card">
+                        <div>📊</div>
+                        <div>Analytics</div>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary" style="width: 100%;">Continue to Workspace</button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

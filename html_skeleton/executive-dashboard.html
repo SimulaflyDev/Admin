@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Executive Dashboard - SimulaFly Admin</title>
+    <link rel="stylesheet" href="layout.css">
+</head>
+<body>
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="sidebar-header">SimulaFly Admin</div>
+        <ul class="nav-menu">
+            <div class="nav-section">Company Command</div>
+            <li class="nav-item active"><a href="executive-dashboard.html">Executive Dashboard</a></li>
+            <li class="nav-item"><a href="realtime-operations.html">Realtime Activity</a></li>
+            <li class="nav-item"><a href="alert-center.html">Alert Center</a></li>
+            
+            <div class="nav-section">Operations</div>
+            <li class="nav-item"><a href="#">User Directory</a></li>
+            <li class="nav-item"><a href="#">Merchant Directory</a></li>
+            <li class="nav-item"><a href="#">Store Management</a></li>
+            <li class="nav-item"><a href="#">Products</a></li>
+            <li class="nav-item"><a href="#">Orders & Bookings</a></li>
+        </ul>
+    </aside>
+
+    <!-- Main Wrapper -->
+    <div class="main-wrapper">
+        <!-- Header -->
+        <header class="top-header">
+            <div class="header-search">
+                <input type="text" placeholder="Search users, merchants, orders...">
+            </div>
+            <div class="header-actions">
+                <span>Org: Global (Super Admin)</span>
+                <button class="btn btn-secondary">Notifications (3)</button>
+                <a href="login.html" class="btn btn-secondary" style="text-decoration: none;">Logout</a>
+            </div>
+        </header>
+
+        <!-- Page Content -->
+        <div class="page-header">
+            <div class="breadcrumb">Company Command Center > Executive Dashboard</div>
+            <h1 class="page-title">Executive Dashboard</h1>
+        </div>
+
+        <div class="content-area">
+            
+            <div class="alert-banner alert-warning">
+                <strong>Attention:</strong> 5 Merchants have balance below minimum threshold. <a href="#">Review Now</a>
+            </div>
+
+            <!-- KPI Cards -->
+            <div class="kpi-grid">
+                <div class="kpi-card">
+                    <div class="kpi-title">Total Revenue (Today)</div>
+                    <div class="kpi-value">₹450,200</div>
+                    <div style="color: #2e7d32; font-size: 0.85rem; margin-top: 5px;">↑ 12% vs Yesterday</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-title">Active Bookings</div>
+                    <div class="kpi-value">1,432</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-title">Active Merchants</div>
+                    <div class="kpi-value">254</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-title">AI Cost (MTD)</div>
+                    <div class="kpi-value">₹12,450</div>
+                </div>
+            </div>
+
+            <!-- Charts Placeholder Area -->
+            <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 20px;">
+                <div class="data-table-container" style="padding: 20px;">
+                    <h3>Revenue vs Bookings (7 Days)</h3>
+                    <div style="height: 250px; background: #f9f9f9; display: flex; align-items: center; justify-content: center; color: #888; margin-top: 15px; border: 1px dashed #ccc;">
+                        [ Trend Chart Placeholder ]
+                    </div>
+                </div>
+                
+                <div class="data-table-container">
+                    <h3 style="padding: 20px 20px 0;">Urgent Queues</h3>
+                    <table style="margin-top: 10px;">
+                        <tbody>
+                            <tr>
+                                <td>Pending KYC Approvals</td>
+                                <td><span class="badge badge-warning">14</span></td>
+                                <td><a href="#">Review</a></td>
+                            </tr>
+                            <tr>
+                                <td>High Priority Support Tickets</td>
+                                <td><span class="badge badge-danger">5</span></td>
+                                <td><a href="#">Resolve</a></td>
+                            </tr>
+                            <tr>
+                                <td>Failed AI Generations</td>
+                                <td><span class="badge badge-warning">23</span></td>
+                                <td><a href="#">Check Logs</a></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Realtime Activity - SimulaFly Admin</title>
+    <link rel="stylesheet" href="layout.css">
+    <style>
+        .feed-container {
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            padding: 20px;
+        }
+        .feed-controls {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        .feed-item {
+            display: flex;
+            gap: 15px;
+            padding: 15px 0;
+            border-bottom: 1px solid #f5f5f5;
+        }
+        .feed-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: #e6f2ff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            flex-shrink: 0;
+        }
+        .feed-content {
+            flex: 1;
+        }
+        .feed-title {
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        .feed-meta {
+            font-size: 0.85rem;
+            color: #888;
+        }
+        .feed-time {
+            font-size: 0.8rem;
+            color: #aaa;
+            white-space: nowrap;
+        }
+    </style>
+</head>
+<body>
+    <aside class="sidebar">
+        <div class="sidebar-header">SimulaFly Admin</div>
+        <ul class="nav-menu">
+            <div class="nav-section">Company Command</div>
+            <li class="nav-item"><a href="executive-dashboard.html">Executive Dashboard</a></li>
+            <li class="nav-item active"><a href="realtime-operations.html">Realtime Activity</a></li>
+            <li class="nav-item"><a href="alert-center.html">Alert Center</a></li>
+            
+            <div class="nav-section">Operations</div>
+            <li class="nav-item"><a href="#">User Directory</a></li>
+            <li class="nav-item"><a href="#">Merchant Directory</a></li>
+            <li class="nav-item"><a href="#">Store Management</a></li>
+            <li class="nav-item"><a href="#">Products</a></li>
+            <li class="nav-item"><a href="#">Orders & Bookings</a></li>
+        </ul>
+    </aside>
+
+    <div class="main-wrapper">
+        <header class="top-header">
+            <div class="header-search">
+                <input type="text" placeholder="Search logs, events, or IDs...">
+            </div>
+            <div class="header-actions">
+                <span>Org: Global (Super Admin)</span>
+                <button class="btn btn-secondary">Notifications (3)</button>
+                <button class="btn btn-secondary">Logout</button>
+            </div>
+        </header>
+
+        <div class="page-header">
+            <div class="breadcrumb">Company Command Center > Realtime Activity Feed</div>
+            <h1 class="page-title">Realtime Operations</h1>
+        </div>
+
+        <div class="content-area">
+            <div class="feed-container">
+                <div class="feed-controls">
+                    <div>
+                        <select class="btn btn-secondary" style="margin-right: 10px;">
+                            <option>All Event Types</option>
+                            <option>User Signups</option>
+                            <option>Merchant Actions</option>
+                            <option>Orders/Bookings</option>
+                            <option>Wallet Recharges</option>
+                            <option>AI Jobs</option>
+                        </select>
+                        <select class="btn btn-secondary">
+                            <option>All Severities</option>
+                            <option>Info</option>
+                            <option>Warning</option>
+                            <option>Critical</option>
+                        </select>
+                    </div>
+                    <div>
+                        <button class="btn btn-primary" style="background-color: #2e7d32;">❚❚ Pause Feed</button>
+                    </div>
+                </div>
+
+                <div class="feed-list">
+                    <div class="feed-item">
+                        <div class="feed-icon" style="background: #e8f5e9; color: #2e7d32;">🛒</div>
+                        <div class="feed-content">
+                            <div class="feed-title">New Order Created: #ORD-9021</div>
+                            <div class="feed-meta">User: Rahul M. • Store: Royal Electronics • Value: ₹4,500</div>
+                        </div>
+                        <div class="feed-time">Just now</div>
+                    </div>
+                    <div class="feed-item">
+                        <div class="feed-icon" style="background: #fff8e1; color: #f57f17;">🤖</div>
+                        <div class="feed-content">
+                            <div class="feed-title">AI Job Delayed: High Latency Warning</div>
+                            <div class="feed-meta">Job: Image Generation • Model: SDXL • Latency: 12.4s</div>
+                        </div>
+                        <div class="feed-time">2 mins ago</div>
+                    </div>
+                    <div class="feed-item">
+                        <div class="feed-icon">👤</div>
+                        <div class="feed-content">
+                            <div class="feed-title">New User Registration</div>
+                            <div class="feed-meta">Source: WhatsApp Referral (Campaign ID: WA-Diwali)</div>
+                        </div>
+                        <div class="feed-time">4 mins ago</div>
+                    </div>
+                    <div class="feed-item">
+                        <div class="feed-icon" style="background: #e8f5e9; color: #2e7d32;">💳</div>
+                        <div class="feed-content">
+                            <div class="feed-title">Merchant Wallet Recharge</div>
+                            <div class="feed-meta">Merchant: Style Hub • Amount: ₹10,000 • Txn: TXN-4491</div>
+                        </div>
+                        <div class="feed-time">10 mins ago</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
