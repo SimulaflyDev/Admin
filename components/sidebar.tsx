@@ -1,13 +1,14 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
+import { useAuthStore } from "@/lib/auth-store"
 import {
   LayoutDashboard, Activity, Bell, Users, BarChart2, GitBranch,
   Store, TrendingUp, ShoppingBag, Package, CheckSquare,
   ClipboardList, AlertTriangle, Wallet, FileText, CreditCard,
-  Tag, Ticket, Percent, Share2, DollarSign, Bot, Cpu, LineChart,
+  Tag, Ticket, Percent, Share2, IndianRupee, Bot, Cpu, LineChart,
   BarChart3, Users2, Building2, Headset, Eye, Lock,
   Zap, FileCheck, Settings, ChevronDown, MousePointerClick, Building,
   LogOut, UserPlus, Repeat, UserCircle
@@ -18,7 +19,7 @@ const macros = [
   { id: "core", label: "Core Ops", icon: LayoutDashboard },
   { id: "entities", label: "Entities", icon: Users },
   { id: "commerce", label: "Bookings", icon: ShoppingBag },
-  { id: "finance", label: "Finance", icon: DollarSign },
+  { id: "finance", label: "Finance", icon: IndianRupee },
   { id: "analytics", label: "Analytics", icon: BarChart3 },
   { id: "system", label: "Management", icon: Building },
 ]
@@ -28,55 +29,55 @@ const allNavGroups = [
   {
     macro: "core", label: "COMMAND CENTER",
     items: [
-      { href: "/executive", label: "Executive Dashboard", icon: LayoutDashboard },
-      { href: "/alerts", label: "Alert Center", icon: Bell },
+      { href: "/executive", label: "Executive Dashboard", icon: LayoutDashboard, perm: "dashboard.read" },
+      { href: "/alerts", label: "Alert Center", icon: Bell, perm: "alerts.read" },
     ]
   },
   // ── ENTITIES ──
   {
     macro: "entities", label: "DIRECTORIES",
     items: [
-      { href: "/users", label: "User Directory", icon: Users },
-      { href: "/merchants", label: "Merchant Directory", icon: Building2 },
-      { href: "/stores", label: "Store Directory", icon: Store },
-      { href: "/products", label: "Product Directory", icon: Package },
+      { href: "/users", label: "User Directory", icon: Users, perm: "users.read" },
+      { href: "/merchants", label: "Merchant Directory", icon: Building2, perm: "merchants.read" },
+      { href: "/stores", label: "Store Directory", icon: Store, perm: "stores.read" },
+      { href: "/products", label: "Product Directory", icon: Package, perm: "products.read" },
     ]
   },
   // ── BOOKINGS ──
   {
     macro: "commerce", label: "OPERATIONS",
     items: [
-      { href: "/bookings", label: "Booking Operations", icon: ClipboardList },
+      { href: "/bookings", label: "Booking Operations", icon: ClipboardList, perm: "bookings.read" },
     ]
   },
   // ── FINANCE ──
   {
     macro: "finance", label: "FINANCE (V1)",
     items: [
-      { href: "/finance/dashboard", label: "Financial Dashboard", icon: LineChart },
-      { href: "/finance/pricing-controls", label: "Pricing Controls", icon: Settings },
-      { href: "/finance/wallets", label: "Merchant Wallets", icon: Wallet },
-      { href: "/finance/redeem-codes", label: "Redeem Codes", icon: Tag },
-      { href: "/finance/invoices", label: "Invoices", icon: FileText },
+      { href: "/finance/dashboard", label: "Financial Dashboard", icon: LineChart, perm: "finance.read" },
+      { href: "/finance/pricing-controls", label: "Pricing Controls", icon: Settings, perm: "pricing.read" },
+      { href: "/finance/wallets", label: "Merchant Wallets", icon: Wallet, perm: "wallets.read" },
+      { href: "/finance/redeem-codes", label: "Redeem Codes", icon: Tag, perm: "redeem.read" },
+      { href: "/finance/invoices", label: "Invoices", icon: FileText, perm: "invoices.read" },
     ]
   },
   // ── ANALYTICS ──
   {
     macro: "analytics", label: "ANALYTICS",
     items: [
-      { href: "/analytics/user", label: "User Activity", icon: Users },
-      { href: "/analytics/merchant", label: "Merchant Activity", icon: Building2 },
-      { href: "/analytics/wallet-referral", label: "Wallet & Referral", icon: Wallet },
-      { href: "/analytics/ai-data", label: "AI & Data Usage", icon: Cpu },
+      { href: "/analytics/user", label: "User Activity", icon: Users, perm: "analytics.read" },
+      { href: "/analytics/merchant", label: "Merchant Activity", icon: Building2, perm: "analytics.read" },
+      { href: "/analytics/wallet-referral", label: "Wallet & Referral", icon: Wallet, perm: "analytics.read" },
+      { href: "/analytics/ai-data", label: "AI & Data Usage", icon: Cpu, perm: "analytics.read" },
     ]
   },
   // ── MANAGEMENT ──
   {
     macro: "system", label: "MANAGEMENT",
     items: [
-      { href: "/support", label: "Support Center", icon: Headset },
-      { href: "/system/audit", label: "Audit Log", icon: FileCheck },
-      { href: "/settings", label: "Settings", icon: Settings },
+      { href: "/support", label: "Support Center", icon: Headset, perm: "support.read" },
+      { href: "/system/audit", label: "Audit Log", icon: FileCheck, perm: "audit.read" },
+      { href: "/settings", label: "Settings", icon: Settings, perm: "accounts.read" },
     ]
   }
 ]
@@ -121,6 +122,45 @@ function NavGroup({ group, pathname }: { group: typeof allNavGroups[0], pathname
 
 export function Sidebar() {
   const pathname = usePathname()
+  const router = useRouter()
+  const signOut = useAuthStore((s) => s.signOut)
+  const fullName = useAuthStore((s) => s.fullName)
+  const email = useAuthStore((s) => s.email)
+  const permissions = useAuthStore((s) => s.permissions)
+  const loaded = useAuthStore((s) => s.loaded)
+
+  // Permission gate: before the effective permission set has loaded, show
+  // everything (avoids an empty-sidebar flash); once loaded, hide anything the
+  // role can't access. The wildcard "*" (Super Admin) satisfies every check.
+  const accessibleGroups = useMemo(() => {
+    const canAccess = (perm?: string) => {
+      if (!perm) return true
+      if (!loaded) return true
+      return permissions.includes("*") || permissions.includes(perm)
+    }
+    return allNavGroups
+      .map((g) => ({ ...g, items: g.items.filter((i) => canAccess(i.perm)) }))
+      .filter((g) => g.items.length > 0)
+  }, [permissions, loaded])
+
+  const visibleMacros = useMemo(
+    () => macros.filter((m) => accessibleGroups.some((g) => g.macro === m.id)),
+    [accessibleGroups]
+  )
+
+  const initials = (fullName || email)
+    ? (fullName || email)!
+        .split(/[\s@.]+/)
+        .map((n) => n[0])
+        .slice(0, 2)
+        .join("")
+        .toUpperCase()
+    : "A"
+
+  async function handleLogout() {
+    await signOut()
+    router.push("/login")
+  }
 
   // Determine active macro
   const activeMacro = useMemo(() => {
@@ -140,7 +180,12 @@ export function Sidebar() {
     setSelectedMacro(activeMacro)
   }, [activeMacro])
 
-  const visibleGroups = allNavGroups.filter(g => g.macro === selectedMacro)
+  // Fall back to the first accessible macro when the selected one is hidden.
+  const effectiveMacro = visibleMacros.some((m) => m.id === selectedMacro)
+    ? selectedMacro
+    : visibleMacros[0]?.id ?? selectedMacro
+
+  const visibleGroups = accessibleGroups.filter(g => g.macro === effectiveMacro)
 
   return (
     <div className="flex h-screen shrink-0">
@@ -150,8 +195,8 @@ export function Sidebar() {
           S
         </div>
         <div className="flex-1 w-full space-y-4 px-2">
-          {macros.map(m => {
-            const isActive = selectedMacro === m.id
+          {visibleMacros.map(m => {
+            const isActive = effectiveMacro === m.id
             return (
               <button
                 key={m.id}
@@ -176,11 +221,11 @@ export function Sidebar() {
       <aside className="w-56 bg-slate-900 flex flex-col overflow-hidden z-10 border-r border-slate-800 shadow-md">
         <div className="px-4 py-6 border-b border-slate-800/60 shrink-0">
           <div className="text-sm font-bold text-white uppercase tracking-widest flex items-center gap-2">
-            {macros.find(m => m.id === selectedMacro)?.icon && (() => {
-              const Icon = macros.find(m => m.id === selectedMacro)!.icon
+            {macros.find(m => m.id === effectiveMacro)?.icon && (() => {
+              const Icon = macros.find(m => m.id === effectiveMacro)!.icon
               return <Icon className="h-4 w-4 text-emerald-400" />
             })()}
-            {macros.find(m => m.id === selectedMacro)?.label}
+            {macros.find(m => m.id === effectiveMacro)?.label}
           </div>
         </div>
 
@@ -209,9 +254,9 @@ export function Sidebar() {
                   <Repeat className="h-4 w-4 text-slate-400" /> Switch Account
                 </Link>
                 <div className="my-1 border-t border-slate-700/50"></div>
-                <Link href="/login" className="w-full px-3 py-2 flex items-center gap-3 text-sm font-bold text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition-colors text-left">
+                <button onClick={handleLogout} className="w-full px-3 py-2 flex items-center gap-3 text-sm font-bold text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition-colors text-left">
                   <LogOut className="h-4 w-4" /> Log Out
-                </Link>
+                </button>
               </div>
             </div>
           )}
@@ -221,10 +266,10 @@ export function Sidebar() {
             className={`flex items-center justify-between gap-3 px-2 py-2 rounded-lg cursor-pointer transition-colors ${userMenuOpen ? 'bg-slate-800' : 'hover:bg-slate-800'}`}
           >
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white text-sm font-bold shadow-sm">N</div>
+              <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white text-sm font-bold shadow-sm">{initials}</div>
               <div>
-                <div className="text-sm font-semibold text-slate-200 leading-tight">Nia R.</div>
-                <div className="text-[11px] font-medium text-emerald-400 tracking-wide mt-0.5">ORG MANAGER</div>
+                <div className="text-sm font-semibold text-slate-200 leading-tight">{fullName || "Admin"}</div>
+                <div className="text-[11px] font-medium text-emerald-400 tracking-wide mt-0.5 truncate max-w-[140px]">{email || "Administrator"}</div>
               </div>
             </div>
             <ChevronDown className={`h-4 w-4 text-slate-500 transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} />

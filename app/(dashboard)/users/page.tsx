@@ -1,125 +1,231 @@
+"use client"
+
+import { useCallback, useEffect, useMemo, useState } from "react"
+import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
-import { Search, Download, Filter, Users as UsersIcon, Bot, ShoppingCart, Activity, FileText, Zap } from "lucide-react"
+import { Search, Download, Users as UsersIcon, Loader2 } from "lucide-react"
 import { EmptyState } from "@/components/ui/empty-state"
-import Link from "next/link"
+import { listUsers, reactivateUser, suspendUser } from "@/lib/api/admin"
+import type { UserListItem } from "@/lib/api/types"
+import { ApiError } from "@/lib/api/types"
 
-const users = [
-  { id: "USR-8921", name: "Rahul M.", email: "rahul.m@email.com", phone: "+91 98765 43210", status: "Active", registered: "12 Oct 2023", bookings: 14, aiSessions: 42, cartValue: 12999, engagement: "High Intent" },
-  { id: "USR-9102", name: "Aakash G.", email: "aakash.g@mail.com", phone: "+91 99887 76655", status: "Active", registered: "20 Dec 2023", bookings: 35, aiSessions: 120, cartValue: 45000, engagement: "Power User" },
-  { id: "USR-9044", name: "Priya S.", email: "priya.s@example.com", phone: "+91 91234 56789", status: "Dormant", registered: "05 Nov 2023", bookings: 2, aiSessions: 3, cartValue: 0, engagement: "Low Intent" },
-]
+const PAGE_SIZE = 25
+
+function formatDate(iso: string): string {
+  try {
+    return new Date(iso).toLocaleDateString(undefined, {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    })
+  } catch {
+    return iso
+  }
+}
 
 export default function UserDirectory() {
+  const [users, setUsers] = useState<UserListItem[]>([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
+  const [search, setSearch] = useState("")
+  const [debounced, setDebounced] = useState("")
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [busyId, setBusyId] = useState<string | null>(null)
+
+  // Debounce the search box.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebounced(search)
+      setPage(1)
+    }, 350)
+    return () => clearTimeout(t)
+  }, [search])
+
+  const fetchUsers = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await listUsers({
+        page,
+        page_size: PAGE_SIZE,
+        search: debounced || undefined,
+        sort: "-created_at",
+      })
+      setUsers(res.items)
+      setTotal(res.total)
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : "Failed to load users from the server."
+      )
+      setUsers([])
+    } finally {
+      setLoading(false)
+    }
+  }, [page, debounced])
+
+  useEffect(() => {
+    void fetchUsers()
+  }, [fetchUsers])
+
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(total / PAGE_SIZE)), [total])
+
+  async function toggleStatus(user: UserListItem) {
+    setBusyId(user.id)
+    try {
+      if (user.is_active) await suspendUser(user.id)
+      else await reactivateUser(user.id)
+      await fetchUsers()
+    } catch {
+      // surfaced via a full refetch / error banner on next load
+    } finally {
+      setBusyId(null)
+    }
+  }
+
   return (
     <div className="p-6 max-w-[1600px] mx-auto pb-24 animate-in fade-in duration-500 space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">User Directory</h1>
-          <p className="text-sm font-medium text-slate-500 mt-1">Manage platform consumers and monitor demand-generation activity</p>
+          <p className="text-sm font-medium text-slate-500 mt-1">
+            Manage platform consumers · {total.toLocaleString()} total
+          </p>
         </div>
-        <div className="flex gap-2">
-          <button className="inline-flex h-9 items-center gap-2 px-4 rounded-lg border border-slate-200 text-slate-700 text-sm font-medium bg-white shadow-sm hover:bg-slate-50 transition-colors">
-            <Download className="h-4 w-4" /> Export CSV
-          </button>
-        </div>
-      </div>
-
-      {/* KPI Strip */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        {[
-          { label: "Total Consumers", val: "142.5K", icon: UsersIcon, color: "text-blue-700", bg: "bg-blue-50" },
-          { label: "Active (30d)", val: "89.2K", icon: Activity, color: "text-emerald-700", bg: "bg-emerald-50" },
-          { label: "AI Visualizations", val: "345K", icon: Bot, color: "text-purple-700", bg: "bg-purple-50" },
-          { label: "Booking Requests", val: "42.1K", icon: FileText, color: "text-indigo-700", bg: "bg-indigo-50" },
-          { label: "Active Cart Intent", val: "₹1.4Cr", icon: ShoppingCart, color: "text-amber-700", bg: "bg-amber-50" },
-        ].map(k => (
-          <div key={k.label} className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm flex flex-col hover:shadow-md transition-shadow">
-            <div className="flex items-center gap-3 mb-2">
-              <div className={`p-2 rounded-lg ${k.bg}`}>
-                <k.icon className={`h-4 w-4 ${k.color}`} />
-              </div>
-              <div className="text-xs font-bold text-slate-500 uppercase">{k.label}</div>
-            </div>
-            <div className={`text-2xl font-black ${k.color}`}>{k.val}</div>
-          </div>
-        ))}
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="flex flex-col sm:flex-row gap-3 p-4 border-b border-slate-100">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-            <Input 
-              type="search" 
-              placeholder="Search name, phone, email..." 
+            <Input
+              type="search"
+              placeholder="Search name or email…"
               className="pl-9 bg-slate-50 border-slate-200 text-sm"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-          <div className="flex gap-2 w-full sm:w-auto">
-            <button className="inline-flex h-9 items-center gap-2 px-4 rounded-lg border border-slate-200 text-slate-700 text-sm font-medium bg-white shadow-sm hover:bg-slate-50 transition-colors">
-              <Filter className="h-4 w-4" /> Filters
-            </button>
-          </div>
         </div>
-        
-        {users.length === 0 ? (
-          <EmptyState 
+
+        {error ? (
+          <div className="p-6 text-sm text-rose-600 bg-rose-50 border-b border-rose-100">{error}</div>
+        ) : null}
+
+        {loading ? (
+          <div className="flex items-center justify-center gap-2 py-16 text-slate-400">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            <span className="text-sm font-medium">Loading users…</span>
+          </div>
+        ) : users.length === 0 ? (
+          <EmptyState
             icon={UsersIcon}
             title="No users found"
-            description="There are currently no users registered on the platform matching your criteria."
-            actionLabel="Clear Filters"
-            onAction={() => console.log("clear")}
+            description="No users match your current search criteria."
+            actionLabel="Clear Search"
+            onAction={() => setSearch("")}
           />
         ) : (
           <div className="overflow-x-auto">
             <Table>
               <TableHeader className="bg-slate-50">
                 <TableRow>
-                  <TableHead>User & Contact</TableHead>
+                  <TableHead>User &amp; Contact</TableHead>
                   <TableHead>Account Status</TableHead>
-                  <TableHead>Demand Gen</TableHead>
-                  <TableHead>Saved Cart Value</TableHead>
-                  <TableHead>Engagement</TableHead>
+                  <TableHead>Acquisition</TableHead>
                   <TableHead className="text-right">Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {users.map((user) => (
-                  <TableRow key={user.id} className="hover:bg-slate-50 cursor-pointer transition-colors">
+                  <TableRow key={user.id} className="hover:bg-slate-50 transition-colors">
                     <TableCell>
-                      <div className="font-bold text-slate-900">{user.name}</div>
+                      <div className="font-bold text-slate-900">{user.full_name || "—"}</div>
                       <div className="text-xs font-medium text-slate-500">{user.email}</div>
-                      <div className="text-[10px] text-slate-400 mt-1 uppercase tracking-wider">ID: {user.id}</div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className={`text-[10px] font-bold tracking-wider uppercase ${user.status === "Active" ? "bg-emerald-100 text-emerald-800 border-emerald-200" : "bg-slate-100 text-slate-600 border-slate-200"}`}>{user.status}</Badge>
-                      <div className="text-xs text-slate-400 mt-1">Joined: {user.registered}</div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-col gap-1 text-sm font-medium">
-                        <div className="flex items-center gap-1.5 text-slate-700"><Bot className="h-3.5 w-3.5 text-purple-500" /> {user.aiSessions} AI Gen</div>
-                        <div className="flex items-center gap-1.5 text-slate-700"><FileText className="h-3.5 w-3.5 text-indigo-500" /> {user.bookings} Bookings</div>
+                      <div className="text-[10px] text-slate-400 mt-1 uppercase tracking-wider">
+                        ID: {user.id.slice(0, 8)}
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="font-bold text-amber-700">₹{user.cartValue.toLocaleString()}</div>
+                      <Badge
+                        variant="outline"
+                        className={`text-[10px] font-bold tracking-wider uppercase ${
+                          user.is_active
+                            ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                            : "bg-slate-100 text-slate-600 border-slate-200"
+                        }`}
+                      >
+                        {user.is_active ? "Active" : "Suspended"}
+                      </Badge>
+                      <div className="text-xs text-slate-400 mt-1">
+                        Joined: {formatDate(user.created_at)}
+                      </div>
                     </TableCell>
                     <TableCell>
-                      <div className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full ${user.engagement === 'High Intent' ? 'bg-blue-100 text-blue-700' : user.engagement === 'Power User' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600'}`}>
-                        <Zap className="h-3 w-3" /> {user.engagement}
+                      <div className="text-sm font-medium text-slate-700 capitalize">
+                        {user.attribution?.acquisition_source ?? "organic"}
                       </div>
+                      {user.attribution?.referring_merchant_name ? (
+                        <div className="text-xs text-slate-400">
+                          via {user.attribution.referring_merchant_name}
+                        </div>
+                      ) : null}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Link href={`/users/${user.id}`} className="inline-flex h-8 items-center justify-center rounded-lg px-3 text-xs font-bold hover:bg-indigo-100 text-indigo-600 bg-indigo-50 transition-colors">
-                        View Profile
-                      </Link>
+                      <div className="inline-flex items-center gap-2">
+                        <Link
+                          href={`/users/${user.id}`}
+                          className="inline-flex h-8 items-center justify-center rounded-lg px-3 text-xs font-bold hover:bg-indigo-100 text-indigo-600 bg-indigo-50 transition-colors"
+                        >
+                          View
+                        </Link>
+                        <button
+                          onClick={() => toggleStatus(user)}
+                          disabled={busyId === user.id}
+                          className={`inline-flex h-8 items-center justify-center rounded-lg px-3 text-xs font-bold transition-colors disabled:opacity-50 ${
+                            user.is_active
+                              ? "text-rose-600 bg-rose-50 hover:bg-rose-100"
+                              : "text-emerald-600 bg-emerald-50 hover:bg-emerald-100"
+                          }`}
+                        >
+                          {busyId === user.id
+                            ? "…"
+                            : user.is_active
+                            ? "Suspend"
+                            : "Reactivate"}
+                        </button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
+          </div>
+        )}
+
+        {!loading && users.length > 0 && (
+          <div className="p-4 border-t border-slate-200 flex items-center justify-between text-sm text-slate-500 bg-slate-50">
+            <span>
+              Page {page} of {totalPages} · {total.toLocaleString()} users
+            </span>
+            <div className="flex gap-1">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="px-2 py-1 bg-white border border-slate-200 rounded hover:bg-slate-50 disabled:opacity-40"
+              >
+                &lt;
+              </button>
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages}
+                className="px-2 py-1 bg-white border border-slate-200 rounded hover:bg-slate-50 disabled:opacity-40"
+              >
+                &gt;
+              </button>
+            </div>
           </div>
         )}
       </div>

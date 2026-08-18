@@ -1,342 +1,475 @@
 "use client"
 
-import { useState } from "react"
-import { Settings, Plus, Play, Pause, Edit, Eye, ShieldAlert, Percent, DollarSign, BrainCircuit, Sparkles, Save, X } from "lucide-react"
+import { useCallback, useEffect, useState } from "react"
+import {
+  Settings,
+  Plus,
+  Edit,
+  Loader2,
+  X,
+  AlertTriangle,
+  Percent,
+  IndianRupee,
+} from "lucide-react"
+import {
+  listPricingRules,
+  createPricingRule,
+  updatePricingRule,
+  formatINR,
+  toNumber,
+  type PricingRuleItem,
+  type RateType,
+} from "@/lib/api/finance"
+import { EmptyState } from "@/components/ui/empty-state"
+import { ApiError } from "@/lib/api/types"
+
+function formatDateTime(iso: string | null): string {
+  if (!iso) return "—"
+  try {
+    return new Date(iso).toLocaleString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+  } catch {
+    return iso
+  }
+}
+
+// Convert an ISO string to a value usable by <input type="datetime-local">.
+function toLocalInput(iso: string | null): string {
+  if (!iso) return ""
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ""
+  const pad = (n: number) => String(n).padStart(2, "0")
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
+    d.getHours()
+  )}:${pad(d.getMinutes())}`
+}
+
+function formatRate(rule: PricingRuleItem): string {
+  if (rule.rate_type === "percentage") return `${toNumber(rule.rate)}%`
+  return formatINR(rule.rate)
+}
+
+interface FormState {
+  event_type: string
+  rate: string
+  rate_type: RateType
+  currency: string
+  effective_from: string
+  effective_until: string
+  notes: string
+}
+
+const EMPTY_FORM: FormState = {
+  event_type: "",
+  rate: "",
+  rate_type: "fixed",
+  currency: "INR",
+  effective_from: "",
+  effective_until: "",
+  notes: "",
+}
 
 export default function PricingControlsPage() {
-  const [buyerIntelEnabled, setBuyerIntelEnabled] = useState(true)
-  const [aiPricingEnabled, setAiPricingEnabled] = useState(true)
+  const [rules, setRules] = useState<PricingRuleItem[]>([])
+  const [includeHistory, setIncludeHistory] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const [rules, setRules] = useState([
-    { id: 1, name: "Standard Booking Fee", cat: "< ₹5,000", type: "Flat", val: "₹100", status: "Active", sc: "emerald" },
-    { id: 2, name: "Large Order Fee", cat: "≥ ₹5,000", type: "Percentage", val: "2%", status: "Active", sc: "emerald" },
-    { id: 3, name: "Default Fallback", cat: "No Match", type: "Flat", val: "₹100", status: "Active", sc: "slate" },
-  ])
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const [editingRule, setEditingRule] = useState<any>(null)
-  
-  const [isSaving, setIsSaving] = useState(false)
-  const [showToast, setShowToast] = useState(false)
+  // Modal state. `editing` null → create mode.
+  const [modalOpen, setModalOpen] = useState(false)
+  const [editing, setEditing] = useState<PricingRuleItem | null>(null)
+  const [form, setForm] = useState<FormState>(EMPTY_FORM)
+  const [saving, setSaving] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
 
-  const handleOpenModal = (rule: any = null) => {
-    setEditingRule(rule)
-    setIsModalOpen(true)
+  const fetchRules = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await listPricingRules({ include_history: includeHistory })
+      setRules(res.items)
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "Failed to load pricing rules from the server."
+      )
+      setRules([])
+    } finally {
+      setLoading(false)
+    }
+  }, [includeHistory])
+
+  useEffect(() => {
+    void fetchRules()
+  }, [fetchRules])
+
+  function openCreate() {
+    setEditing(null)
+    setForm(EMPTY_FORM)
+    setFormError(null)
+    setModalOpen(true)
   }
 
-  const toggleRuleStatus = (id: number) => {
-    setRules(rules.map(r => r.id === id ? { ...r, status: r.status === "Active" ? "Paused" : "Active", sc: r.status === "Active" ? "amber" : "emerald" } : r))
+  function openEdit(rule: PricingRuleItem) {
+    setEditing(rule)
+    setForm({
+      event_type: rule.event_type,
+      rate: String(toNumber(rule.rate)),
+      rate_type: (rule.rate_type as RateType) ?? "fixed",
+      currency: rule.currency,
+      effective_from: "",
+      effective_until: toLocalInput(rule.effective_until),
+      notes: rule.notes ?? "",
+    })
+    setFormError(null)
+    setModalOpen(true)
   }
 
-  const handleSaveConfig = () => {
-    setIsSaving(true)
-    setTimeout(() => {
-      setIsSaving(false)
-      setShowToast(true)
-      window.dispatchEvent(new CustomEvent('pricing-config-saved'))
-      setTimeout(() => setShowToast(false), 5000)
-    }, 1500)
+  function update<K extends keyof FormState>(key: K, val: FormState[K]) {
+    setForm((f) => ({ ...f, [key]: val }))
+  }
+
+  // Client validation: rate >= 0; effective_until >= effective_from.
+  function validate(): string | null {
+    const rateNum = Number(form.rate)
+    if (!Number.isFinite(rateNum) || rateNum < 0) {
+      return "Rate must be zero or greater."
+    }
+    if (!editing && form.event_type.trim() === "") {
+      return "Event type is required."
+    }
+    if (form.effective_from && form.effective_until) {
+      const from = new Date(form.effective_from).getTime()
+      const until = new Date(form.effective_until).getTime()
+      if (until < from) {
+        return "Effective until must not precede effective from."
+      }
+    }
+    return null
+  }
+
+  async function submit() {
+    const validationError = validate()
+    if (validationError) {
+      setFormError(validationError)
+      return
+    }
+    setSaving(true)
+    setFormError(null)
+
+    const fromIso = form.effective_from
+      ? new Date(form.effective_from).toISOString()
+      : undefined
+    const untilIso = form.effective_until
+      ? new Date(form.effective_until).toISOString()
+      : null
+
+    try {
+      if (editing) {
+        await updatePricingRule(editing.id, {
+          rate: Number(form.rate),
+          rate_type: form.rate_type,
+          currency: form.currency,
+          effective_from: fromIso,
+          effective_until: untilIso,
+          notes: form.notes || null,
+        })
+      } else {
+        await createPricingRule({
+          event_type: form.event_type.trim(),
+          rate: Number(form.rate),
+          rate_type: form.rate_type,
+          currency: form.currency,
+          effective_from: fromIso,
+          effective_until: untilIso,
+          notes: form.notes || null,
+        })
+      }
+      setModalOpen(false)
+      await fetchRules()
+    } catch (err) {
+      if (err instanceof ApiError) {
+        // 422 → backend validation (negative rate / inverted window): surface it.
+        setFormError(err.message || "The server rejected this pricing rule.")
+      } else {
+        setFormError("Failed to save the pricing rule. Please try again.")
+      }
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
-    <div className="p-6 max-w-[1600px] mx-auto pb-24 animate-in fade-in duration-500 space-y-8">
-      
+    <div className="p-6 max-w-[1600px] mx-auto pb-24 animate-in fade-in duration-500 space-y-6">
       {/* ── Page Header ── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
-              <Settings className="h-6 w-6 text-indigo-600" />
-              Pricing Controls
-            </h1>
-            <span className="bg-indigo-50 text-indigo-700 text-xs font-bold px-2.5 py-1 rounded-md border border-indigo-200 flex items-center gap-1">
-              Org Manager Only
-            </span>
-          </div>
-          <p className="text-sm text-slate-500 mt-1">Configure booking fee rules and merchant charges for the region.</p>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
+            <Settings className="h-6 w-6 text-indigo-600" />
+            Pricing Controls
+          </h1>
+          <p className="text-sm text-slate-500 mt-1">
+            Configure event pricing rules and effective windows (INR).
+          </p>
         </div>
         <div className="flex items-center gap-3">
-          <button 
-            onClick={handleSaveConfig}
-            disabled={isSaving}
-            className="inline-flex h-9 items-center gap-2 px-4 rounded-lg bg-indigo-600 border border-transparent text-white text-sm font-semibold shadow-sm hover:bg-indigo-700 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
+          <button
+            onClick={() => setIncludeHistory((v) => !v)}
+            className={`inline-flex h-9 items-center gap-2 px-4 rounded-lg text-sm font-semibold border transition-colors ${
+              includeHistory
+                ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+            }`}
           >
-            {isSaving ? (
-              <div className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
-            ) : (
-              <Save className="h-4 w-4" />
-            )}
-            {isSaving ? "Saving..." : "Save Configuration"}
+            {includeHistory ? "Showing history" : "Current only"}
+          </button>
+          <button
+            onClick={openCreate}
+            className="inline-flex h-9 items-center gap-2 px-4 rounded-lg bg-indigo-600 border border-transparent text-white text-sm font-semibold shadow-sm hover:bg-indigo-700 transition-colors"
+          >
+            <Plus className="h-4 w-4" /> Create Rule
           </button>
         </div>
       </div>
 
-      {/* ── Rule Summary ── */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-center">
-          <div className="text-sm font-semibold text-slate-600 mb-1 flex items-center justify-between">
-            Current Pricing Policy
-            <Play className="h-4 w-4 text-emerald-500" />
-          </div>
-          <div className="text-xl font-bold text-slate-900 mt-2">Orders Below ₹5,000</div>
-          <div className="text-sm font-black text-indigo-600 mt-1">₹100 Fixed Fee</div>
-        </div>
-        
-        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-center">
-          <div className="text-sm font-semibold text-slate-600 mb-1 flex items-center justify-between">
-            Large Order Policy
-            <Percent className="h-4 w-4 text-emerald-500" />
-          </div>
-          <div className="text-xl font-bold text-slate-900 mt-2">Orders ₹5,000+</div>
-          <div className="text-sm font-black text-indigo-600 mt-1">2% of Merchant Order Value</div>
-        </div>
-
-        <div className="bg-indigo-50 rounded-2xl border border-indigo-200 p-5 shadow-sm flex flex-col justify-center relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-4 opacity-10">
-            <DollarSign className="h-16 w-16 text-indigo-600" />
-          </div>
-          <div className="text-sm font-semibold text-indigo-800 mb-1 relative z-10 flex items-center justify-between">
-            Estimated Revenue
-          </div>
-          <div className="text-3xl font-black text-indigo-900 relative z-10 mt-1">₹12,450</div>
-          <div className="text-xs font-medium text-indigo-700 mt-1 relative z-10">
-            Today's Booking Fees
-          </div>
-        </div>
-      </div>
-
-      {/* ── Fee Rules Table ── */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mb-8">
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-          <h3 className="font-bold text-slate-900">Active Pricing Rules</h3>
-          <button onClick={() => handleOpenModal()} className="inline-flex h-8 items-center gap-2 px-3 rounded-md bg-white border border-slate-200 text-slate-700 text-xs font-bold shadow-sm hover:bg-slate-50 transition-colors">
-            <Plus className="h-3 w-3" /> Create Fee Rule
-          </button>
+          <h3 className="font-bold text-slate-900">Pricing Rules</h3>
+          <span className="text-xs font-semibold text-slate-500">
+            {rules.length.toLocaleString("en-IN")} shown
+          </span>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead className="text-xs text-slate-500 bg-white border-b border-slate-200 uppercase font-semibold">
-              <tr>
-                <th className="px-6 py-4">Rule Name</th>
-                <th className="px-6 py-4">Order Value</th>
-                <th className="px-6 py-4">Fee Structure</th>
-                <th className="px-6 py-4">Status</th>
-                <th className="px-6 py-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {rules.map((rule, i) => (
-                <tr key={rule.id} className={`hover:bg-slate-50 transition-colors ${rule.status === 'Paused' ? 'opacity-60' : ''}`}>
-                  <td className="px-6 py-4">
-                    <div className="font-semibold text-slate-900">{rule.name}</div>
-                  </td>
-                  <td className="px-6 py-4 font-medium text-indigo-600">{rule.cat}</td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-2">
-                      {rule.type === "Flat" && <span className="bg-slate-100 p-1 rounded"><DollarSign className="h-3 w-3 text-slate-500" /></span>}
-                      {rule.type === "Percentage" && <span className="bg-slate-100 p-1 rounded"><Percent className="h-3 w-3 text-slate-500" /></span>}
-                      <span className="font-bold text-slate-800">{rule.val}</span>
-                      <span className="text-xs text-slate-500">({rule.type})</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold border border-${rule.sc}-200 bg-${rule.sc}-50 text-${rule.sc}-700`}>
-                      {rule.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <button className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="View Impact">
-                        <Eye className="h-4 w-4" />
-                      </button>
-                      <button onClick={() => handleOpenModal(rule)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Edit Rule">
-                        <Edit className="h-4 w-4" />
-                      </button>
-                      {rule.status === "Active" ? (
-                        <button onClick={() => toggleRuleStatus(rule.id)} className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors" title="Disable Rule">
-                          <Pause className="h-4 w-4" />
-                        </button>
-                      ) : (
-                        <button onClick={() => toggleRuleStatus(rule.id)} className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors" title="Activate Rule">
-                          <Play className="h-4 w-4" />
-                        </button>
-                      )}
-                    </div>
-                  </td>
+
+        {error ? (
+          <div className="p-6 text-sm text-rose-600 bg-rose-50 border-b border-rose-100">
+            {error}
+          </div>
+        ) : null}
+
+        {loading ? (
+          <div className="flex items-center justify-center gap-2 py-16 text-slate-400">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            <span className="text-sm font-medium">Loading pricing rules…</span>
+          </div>
+        ) : rules.length === 0 ? (
+          <EmptyState
+            icon={Settings}
+            title="No pricing rules"
+            description="Create a pricing rule to start charging for platform events."
+            actionLabel="Create Rule"
+            onAction={openCreate}
+          />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left">
+              <thead className="text-xs text-slate-500 bg-white border-b border-slate-200 uppercase font-semibold">
+                <tr>
+                  <th className="px-6 py-4">Event Type</th>
+                  <th className="px-6 py-4">Rate</th>
+                  <th className="px-6 py-4">Effective From</th>
+                  <th className="px-6 py-4">Effective Until</th>
+                  <th className="px-6 py-4">Scope</th>
+                  <th className="px-6 py-4 text-right">Action</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {rules.map((rule) => (
+                  <tr key={rule.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-6 py-4">
+                      <div className="font-semibold text-slate-900">
+                        {rule.event_type}
+                      </div>
+                      {rule.notes ? (
+                        <div className="text-xs text-slate-400 mt-0.5">
+                          {rule.notes}
+                        </div>
+                      ) : null}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        <span className="bg-slate-100 p-1 rounded">
+                          {rule.rate_type === "percentage" ? (
+                            <Percent className="h-3 w-3 text-slate-500" />
+                          ) : (
+                            <IndianRupee className="h-3 w-3 text-slate-500" />
+                          )}
+                        </span>
+                        <span className="font-bold text-slate-800">
+                          {formatRate(rule)}
+                        </span>
+                        <span className="text-xs text-slate-500 capitalize">
+                          ({rule.rate_type})
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-slate-500 text-xs">
+                      {formatDateTime(rule.effective_from)}
+                    </td>
+                    <td className="px-6 py-4 text-slate-500 text-xs">
+                      {formatDateTime(rule.effective_until)}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold border border-slate-200 bg-slate-50 text-slate-600">
+                        {rule.merchant_id ? "Merchant" : "Global"}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <button
+                        onClick={() => openEdit(rule)}
+                        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition-colors"
+                      >
+                        <Edit className="h-3.5 w-3.5" /> Edit
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* ── Section B: Buyer Intel ── */}
-        <div className="space-y-4">
-          <div className="flex items-center gap-2 pb-2 border-b border-slate-200">
-            <BrainCircuit className="h-5 w-5 text-slate-800" />
-            <h2 className="text-lg font-bold text-slate-900">Buyer Intel Pricing</h2>
-          </div>
-          <p className="text-sm text-slate-500 mb-4">Control unlock costs for behavioral signals and engagement insights.</p>
-
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col justify-between h-[320px]">
-            <div className="flex items-center justify-between mb-4">
-              <label className="font-semibold text-slate-900">Enable Buyer Intel</label>
-              <div 
-                onClick={() => setBuyerIntelEnabled(!buyerIntelEnabled)}
-                className={`w-11 h-6 rounded-full relative cursor-pointer shadow-inner transition-colors duration-200 ${buyerIntelEnabled ? 'bg-emerald-500' : 'bg-slate-300'}`}
-              >
-                <div className={`absolute top-1 bg-white w-4 h-4 rounded-full shadow-sm transition-all duration-200 ${buyerIntelEnabled ? 'right-1' : 'left-1'}`}></div>
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs font-bold text-slate-500 mb-1.5 block uppercase tracking-wider">Tier 1 Unlock Fee</label>
-                <div className="flex items-center bg-white border border-slate-300 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500">
-                  <div className="bg-slate-50 px-3 py-2 border-r border-slate-300 text-slate-500 text-sm font-bold">₹</div>
-                  <input type="number" defaultValue="30" className="w-full px-3 py-2 text-sm font-bold text-slate-900 outline-none" />
-                </div>
-                <div className="text-xs text-slate-500 mt-1">10% - 80% Conv. Probability</div>
-              </div>
-              <div>
-                <label className="text-xs font-bold text-slate-500 mb-1.5 block uppercase tracking-wider">Tier 2 Unlock Fee</label>
-                <div className="flex items-center bg-white border border-slate-300 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500">
-                  <div className="bg-slate-50 px-3 py-2 border-r border-slate-300 text-slate-500 text-sm font-bold">₹</div>
-                  <input type="number" defaultValue="50" className="w-full px-3 py-2 text-sm font-bold text-slate-900 outline-none" />
-                </div>
-                <div className="text-xs text-slate-500 mt-1">81% - 99% Conv. Probability</div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-100">
-              <div>
-                <label className="text-xs font-bold text-slate-500 mb-1.5 block uppercase tracking-wider">Free Unlocks / Month</label>
-                <input type="number" defaultValue="0" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" />
-              </div>
-              <div>
-                <label className="text-xs font-bold text-slate-500 mb-1.5 block uppercase tracking-wider">Max Unlocks / Day</label>
-                <select className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
-                  <option>Unlimited</option>
-                  <option>100</option>
-                  <option>50</option>
-                  <option>10</option>
-                </select>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* ── Section C: AI Visualization ── */}
-        <div className="space-y-4">
-          <div className="flex items-center gap-2 pb-2 border-b border-slate-200">
-            <Sparkles className="h-5 w-5 text-slate-800" />
-            <h2 className="text-lg font-bold text-slate-900">AI Visualization Pricing</h2>
-          </div>
-          <p className="text-sm text-slate-500 mb-4">Charge merchants when users successfully generate room visualizations using their products.</p>
-
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden h-[320px] flex flex-col">
-            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/30">
-              <label className="font-semibold text-slate-900">Enable AI Pricing</label>
-              <div 
-                onClick={() => setAiPricingEnabled(!aiPricingEnabled)}
-                className={`w-11 h-6 rounded-full relative cursor-pointer shadow-inner transition-colors duration-200 ${aiPricingEnabled ? 'bg-emerald-500' : 'bg-slate-300'}`}
-              >
-                <div className={`absolute top-1 bg-white w-4 h-4 rounded-full shadow-sm transition-all duration-200 ${aiPricingEnabled ? 'right-1' : 'left-1'}`}></div>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 divide-y divide-x divide-slate-100 flex-1">
-              
-              <div className="p-5 flex flex-col justify-center">
-                <div className="text-sm font-semibold text-slate-600 mb-2">Image Generation</div>
-                <div className="flex items-center bg-white border border-slate-300 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500 w-28">
-                  <div className="bg-slate-50 px-3 py-1.5 border-r border-slate-300 text-slate-500 text-sm font-bold">₹</div>
-                  <input type="number" defaultValue="1" className="w-full px-3 py-1.5 text-sm font-bold text-indigo-600 outline-none" />
-                </div>
-                <div className="text-[11px] font-medium text-slate-500 mt-2">Per completed image</div>
-              </div>
-
-              <div className="p-5 flex flex-col justify-center">
-                <div className="text-sm font-semibold text-slate-600 mb-2">Regeneration</div>
-                <div className="flex items-center bg-white border border-slate-300 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500 w-28">
-                  <div className="bg-slate-50 px-3 py-1.5 border-r border-slate-300 text-slate-500 text-sm font-bold">₹</div>
-                  <input type="number" defaultValue="1" className="w-full px-3 py-1.5 text-sm font-bold text-indigo-600 outline-none" />
-                </div>
-                <div className="text-[11px] font-medium text-slate-500 mt-2">Per AI re-generate</div>
-              </div>
-
-              <div className="p-5 bg-slate-50/50 flex flex-col justify-center">
-                <div className="text-sm font-semibold text-slate-600 mb-1">Failed Generation</div>
-                <div className="text-xl font-bold text-slate-400">₹0</div>
-                <div className="text-[11px] font-medium text-slate-500 mt-1">No charge for failures</div>
-              </div>
-
-              <div className="p-5 bg-slate-50/50 flex flex-col justify-center">
-                <div className="text-sm font-semibold text-slate-600 mb-1">Preview Open</div>
-                <div className="text-xl font-bold text-slate-400">₹0</div>
-                <div className="text-[11px] font-medium text-slate-500 mt-1">Free interaction</div>
-              </div>
-
-            </div>
-          </div>
-        </div>
-
-      </div>
-
-      {/* ── Create/Edit Modal ── */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md overflow-hidden">
+      {/* ── Create / Edit Modal ── */}
+      {modalOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center animate-in fade-in duration-200 p-4">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-lg overflow-hidden">
             <div className="p-5 border-b border-slate-100 flex items-center justify-between">
-              <h3 className="font-bold text-slate-900">{editingRule?.id ? "Edit Fee Rule" : "Create Fee Rule"}</h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
+              <h3 className="font-bold text-slate-900">
+                {editing ? "Update Pricing Rule" : "Create Pricing Rule"}
+              </h3>
+              <button
+                onClick={() => setModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 transition-colors"
+              >
                 <X className="h-5 w-5" />
               </button>
             </div>
             <div className="p-6 space-y-5">
               <div>
-                <label className="text-xs font-bold text-slate-500 mb-1.5 block uppercase tracking-wider">Rule Name</label>
-                <input type="text" defaultValue={editingRule?.name || ""} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="e.g. Standard Booking Fee" />
+                <label className="text-xs font-bold text-slate-500 mb-1.5 block uppercase tracking-wider">
+                  Event Type
+                </label>
+                <input
+                  type="text"
+                  value={form.event_type}
+                  onChange={(e) => update("event_type", e.target.value)}
+                  disabled={!!editing}
+                  placeholder="e.g. booking_fee"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none disabled:bg-slate-50 disabled:text-slate-500"
+                />
+                {editing ? (
+                  <p className="text-xs text-slate-400 mt-1">
+                    Updating opens a new effective window; event type is fixed.
+                  </p>
+                ) : null}
               </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs font-bold text-slate-500 mb-1.5 block uppercase tracking-wider">Order Value</label>
-                  <input type="text" defaultValue={editingRule?.cat || ""} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="e.g. < ₹5,000" />
+                  <label className="text-xs font-bold text-slate-500 mb-1.5 block uppercase tracking-wider">
+                    Rate
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={form.rate}
+                    onChange={(e) => update("rate", e.target.value)}
+                    placeholder="0.00"
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none"
+                  />
                 </div>
                 <div>
-                  <label className="text-xs font-bold text-slate-500 mb-1.5 block uppercase tracking-wider">Fee Structure</label>
-                  <select defaultValue={editingRule?.type || "Flat"} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
-                    <option value="Flat">Flat Fee</option>
-                    <option value="Percentage">Percentage</option>
+                  <label className="text-xs font-bold text-slate-500 mb-1.5 block uppercase tracking-wider">
+                    Rate Type
+                  </label>
+                  <select
+                    value={form.rate_type}
+                    onChange={(e) =>
+                      update("rate_type", e.target.value as RateType)
+                    }
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                  >
+                    <option value="fixed">Fixed (₹)</option>
+                    <option value="percentage">Percentage (%)</option>
                   </select>
                 </div>
               </div>
-              <div>
-                <label className="text-xs font-bold text-slate-500 mb-1.5 block uppercase tracking-wider">Fee Value</label>
-                <input type="text" defaultValue={editingRule?.val || ""} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="e.g. ₹100 or 2%" />
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-bold text-slate-500 mb-1.5 block uppercase tracking-wider">
+                    Effective From
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={form.effective_from}
+                    onChange={(e) => update("effective_from", e.target.value)}
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none"
+                  />
+                  <p className="text-xs text-slate-400 mt-1">
+                    Defaults to now if left empty.
+                  </p>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 mb-1.5 block uppercase tracking-wider">
+                    Effective Until
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={form.effective_until}
+                    onChange={(e) => update("effective_until", e.target.value)}
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none"
+                  />
+                  <p className="text-xs text-slate-400 mt-1">
+                    Optional open-ended window.
+                  </p>
+                </div>
               </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-500 mb-1.5 block uppercase tracking-wider">
+                  Notes
+                </label>
+                <input
+                  type="text"
+                  value={form.notes}
+                  onChange={(e) => update("notes", e.target.value)}
+                  placeholder="Optional description"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none"
+                />
+              </div>
+
+              {formError ? (
+                <div className="p-3 rounded-lg text-sm text-rose-700 bg-rose-50 border border-rose-200 flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                  <span>{formError}</span>
+                </div>
+              ) : null}
             </div>
             <div className="p-5 border-t border-slate-100 flex items-center justify-end gap-3 bg-slate-50/50">
-              <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">Cancel</button>
-              <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors">Save Rule</button>
+              <button
+                onClick={() => setModalOpen(false)}
+                disabled={saving}
+                className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submit}
+                disabled={saving}
+                className="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors disabled:opacity-70 inline-flex items-center gap-2"
+              >
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                {saving ? "Saving…" : editing ? "Update Rule" : "Create Rule"}
+              </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Success Toast Notification ── */}
-      {showToast && (
-        <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom-5 fade-in duration-300">
-          <div className="bg-slate-900 text-white p-4 rounded-xl shadow-2xl border border-slate-800 flex items-start gap-3 w-80">
-            <div className="p-1 bg-emerald-500/20 text-emerald-400 rounded-full shrink-0">
-              <Sparkles className="h-4 w-4" />
-            </div>
-            <div>
-              <h4 className="font-bold text-sm">Configuration Saved</h4>
-              <p className="text-xs text-slate-400 mt-1">Changes are live. System notification dispatched to all Org Managers and Finance Team members.</p>
-            </div>
-            <button onClick={() => setShowToast(false)} className="ml-auto text-slate-400 hover:text-white shrink-0">
-              <X className="h-4 w-4" />
-            </button>
           </div>
         </div>
       )}

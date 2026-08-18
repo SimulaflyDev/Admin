@@ -1,7 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Building2, Shield, Users, Bell, Lock, FileCheck, Check, Save, RotateCcw, Plus, UserPlus, Server, Key, Eye, Edit2, CheckCircle2, Crown } from "lucide-react"
+import { listRoles, listAccounts, createInvitation, deactivateAccount, reactivateAccount, type RoleResponse, type AccountListItem, type InvitationCreateResponse } from "@/lib/api/settings"
+import { listAudit, type AuditEntry } from "@/lib/api/ops"
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState("org")
@@ -143,13 +145,38 @@ function TabOrganization() {
 }
 
 function TabRoles() {
-  const roles = [
-    { id: "org_manager", name: "Org Manager", desc: "Supreme root admin. Unrestricted access.", color: "text-rose-600 bg-rose-50 border-rose-200", p: { v: true, e: true, a: true, o: true } },
-    { id: "fin_lead", name: "Finance Lead", desc: "Manages wallets, billing, and refunds.", color: "text-emerald-600 bg-emerald-50 border-emerald-200", p: { v: true, e: true, a: true, o: false } },
-    { id: "ops_lead", name: "Operations Lead", desc: "Manages merchants, stores, and products.", color: "text-blue-600 bg-blue-50 border-blue-200", p: { v: true, e: true, a: true, o: false } },
-    { id: "sup_lead", name: "Support Lead", desc: "Manages tickets and consumer disputes.", color: "text-indigo-600 bg-indigo-50 border-indigo-200", p: { v: true, e: true, a: false, o: false } },
-    { id: "tech_lead", name: "Technical Lead", desc: "Manages AI operations and system health.", color: "text-purple-600 bg-purple-50 border-purple-200", p: { v: true, e: false, a: false, o: false } },
+  const [roles, setRoles] = useState<RoleResponse[] | null>(null)
+  const [error, setError] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    listRoles()
+      .then((res) => { if (!cancelled) setRoles(res.roles) })
+      .catch(() => { if (!cancelled) setError(true) })
+    return () => { cancelled = true }
+  }, [])
+
+  // Card accent colors, cycled by index so each role reads distinctly.
+  const palette = [
+    "text-rose-600 bg-rose-50 border-rose-200",
+    "text-emerald-600 bg-emerald-50 border-emerald-200",
+    "text-blue-600 bg-blue-50 border-blue-200",
+    "text-indigo-600 bg-indigo-50 border-indigo-200",
+    "text-purple-600 bg-purple-50 border-purple-200",
+    "text-amber-600 bg-amber-50 border-amber-200",
   ]
+
+  // Summarise a role's permission keys into the four capability badges the
+  // UI renders. Derived honestly from the real permission catalog.
+  const caps = (perms: string[]) => {
+    const root = perms.includes("*")
+    return {
+      v: root || perms.length > 0,
+      e: root || perms.some((p) => !p.endsWith(".read")),
+      a: root || perms.some((p) => p.includes("approve") || p.endsWith(".manage")),
+      o: root,
+    }
+  }
 
   return (
     <>
@@ -159,41 +186,61 @@ function TabRoles() {
       </div>
 
       <div className="space-y-4">
-        {roles.map((r, i) => (
-          <div key={i} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:border-slate-300 transition-colors">
-            <div className="flex items-start justify-between">
-              
-              <div className="flex gap-4">
-                <div className={`w-12 h-12 rounded-xl border flex items-center justify-center shrink-0 ${r.color}`}>
-                  <Shield className="h-6 w-6" />
-                </div>
-                <div>
-                  <h4 className="font-bold text-slate-900 text-lg flex items-center gap-2">
-                    {r.name}
-                    {r.id === 'org_manager' && <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-900 text-white px-2 py-0.5 rounded">Root</span>}
-                  </h4>
-                  <p className="text-sm text-slate-500 mt-1">{r.desc}</p>
-                </div>
-              </div>
-
-              <div className="flex gap-2">
-                <div className={`px-3 py-1.5 rounded-lg border text-xs font-bold flex flex-col items-center justify-center min-w-[70px] ${r.p.v ? 'bg-slate-50 border-slate-200 text-slate-700' : 'bg-slate-50 border-slate-100 text-slate-300'}`}>
-                  <Eye className="h-4 w-4 mb-1" /> View
-                </div>
-                <div className={`px-3 py-1.5 rounded-lg border text-xs font-bold flex flex-col items-center justify-center min-w-[70px] ${r.p.e ? 'bg-slate-50 border-slate-200 text-slate-700' : 'bg-slate-50 border-slate-100 text-slate-300'}`}>
-                  <Edit2 className="h-4 w-4 mb-1" /> Edit
-                </div>
-                <div className={`px-3 py-1.5 rounded-lg border text-xs font-bold flex flex-col items-center justify-center min-w-[70px] ${r.p.a ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-slate-50 border-slate-100 text-slate-300'}`}>
-                  <CheckCircle2 className="h-4 w-4 mb-1" /> Approve
-                </div>
-                <div className={`px-3 py-1.5 rounded-lg border text-xs font-bold flex flex-col items-center justify-center min-w-[70px] ${r.p.o ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-slate-50 border-slate-100 text-slate-300'}`}>
-                  <Lock className="h-4 w-4 mb-1" /> Override
-                </div>
-              </div>
-
-            </div>
+        {error && (
+          <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-sm text-slate-400 font-medium">
+            Unable to load roles.
           </div>
-        ))}
+        )}
+        {!error && roles === null && (
+          <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-sm text-slate-400 font-medium">
+            Loading roles…
+          </div>
+        )}
+        {!error && roles !== null && roles.length === 0 && (
+          <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-sm text-slate-400 font-medium">
+            No roles defined.
+          </div>
+        )}
+        {!error && roles !== null && roles.map((r, i) => {
+          const p = caps(r.permissions)
+          const color = palette[i % palette.length]
+          return (
+            <div key={r.id} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:border-slate-300 transition-colors">
+              <div className="flex items-start justify-between">
+
+                <div className="flex gap-4">
+                  <div className={`w-12 h-12 rounded-xl border flex items-center justify-center shrink-0 ${color}`}>
+                    <Shield className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-slate-900 text-lg flex items-center gap-2">
+                      {r.name}
+                      {p.o && <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-900 text-white px-2 py-0.5 rounded">Root</span>}
+                      {!p.o && r.is_predefined && <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-500 px-2 py-0.5 rounded">Predefined</span>}
+                    </h4>
+                    <p className="text-sm text-slate-500 mt-1">{r.description || `${r.permissions.length} permission${r.permissions.length === 1 ? "" : "s"} granted`}</p>
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  <div className={`px-3 py-1.5 rounded-lg border text-xs font-bold flex flex-col items-center justify-center min-w-[70px] ${p.v ? 'bg-slate-50 border-slate-200 text-slate-700' : 'bg-slate-50 border-slate-100 text-slate-300'}`}>
+                    <Eye className="h-4 w-4 mb-1" /> View
+                  </div>
+                  <div className={`px-3 py-1.5 rounded-lg border text-xs font-bold flex flex-col items-center justify-center min-w-[70px] ${p.e ? 'bg-slate-50 border-slate-200 text-slate-700' : 'bg-slate-50 border-slate-100 text-slate-300'}`}>
+                    <Edit2 className="h-4 w-4 mb-1" /> Edit
+                  </div>
+                  <div className={`px-3 py-1.5 rounded-lg border text-xs font-bold flex flex-col items-center justify-center min-w-[70px] ${p.a ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-slate-50 border-slate-100 text-slate-300'}`}>
+                    <CheckCircle2 className="h-4 w-4 mb-1" /> Approve
+                  </div>
+                  <div className={`px-3 py-1.5 rounded-lg border text-xs font-bold flex flex-col items-center justify-center min-w-[70px] ${p.o ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-slate-50 border-slate-100 text-slate-300'}`}>
+                    <Lock className="h-4 w-4 mb-1" /> Override
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          )
+        })}
 
         <button className="w-full py-4 border-2 border-dashed border-slate-300 rounded-xl text-sm font-bold text-slate-500 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2">
           <Plus className="h-5 w-5" /> Create Custom Role
@@ -204,243 +251,206 @@ function TabRoles() {
 }
 
 function TabTeams() {
-  const [selectedTeam, setSelectedTeam] = useState<string | null>(null)
-  const [selectedMember, setSelectedMember] = useState<any | null>(null)
-  const [panelMode, setPanelMode] = useState<"activity" | "manage" | "add" | null>(null)
-  const [showRemoveConfirm, setShowRemoveConfirm] = useState(false)
-  const [toastMsg, setToastMsg] = useState<string | null>(null)
+  const [accounts, setAccounts] = useState<AccountListItem[] | null>(null)
+  const [error, setError] = useState(false)
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [inviteOpen, setInviteOpen] = useState(false)
 
-  const teams = [
-    { name: "Support Team", count: 24, lead: "Sarah Jenkins" },
-    { name: "Finance Team", count: 8, lead: "Marcus Thorne" },
-    { name: "Operations Team", count: 15, lead: "David Kim" },
-    { name: "Analytics Team", count: 5, lead: "Priya Patel" },
-    { name: "Technical Team", count: 12, lead: "Alex Rivera" },
-    { name: "Trust & Safety", count: 6, lead: "Elena Rostova" },
-  ]
-
-  const mockMembers: Record<string, any[]> = {
-    "Support Team": [
-      { id: 1, name: "Sarah Jenkins", role: "Support Lead", status: "online", lastActive: "Just now", actions: ["Resolved Dispute TCK-812", "Approved refund for M-8922", "Logged in"] },
-      { id: 2, name: "John Doe", role: "L1 Agent", status: "away", lastActive: "10m ago", actions: ["Replied to TCK-992", "Escalated TCK-994", "Logged in"] },
-      { id: 3, name: "Jane Smith", role: "L2 Agent", status: "offline", lastActive: "2h ago", actions: ["Closed TCK-881", "Added internal note to TCK-881"] }
-    ],
-    "Operations Team": [
-      { id: 4, name: "David Kim", role: "Operations Lead", status: "online", lastActive: "Just now", actions: ["Approved Store STR-012", "Rejected Product PRD-441", "Reviewed Merchant KYC"] },
-    ]
+  const load = () => {
+    listAccounts({ page_size: 100 })
+      .then((res) => setAccounts(res.items))
+      .catch(() => setError(true))
   }
 
-  const getMembers = (tName: string) => mockMembers[tName] || [
-    { id: 99, name: "Unknown User", role: "Staff", status: "offline", lastActive: "Unknown", actions: ["No recent activity"] }
-  ]
+  useEffect(() => {
+    let cancelled = false
+    listAccounts({ page_size: 100 })
+      .then((res) => { if (!cancelled) setAccounts(res.items) })
+      .catch(() => { if (!cancelled) setError(true) })
+    return () => { cancelled = true }
+  }, [])
 
-  const handleActionToast = (msg: string) => {
-    setToastMsg(msg)
-    setTimeout(() => setToastMsg(null), 4000)
-    setPanelMode(null)
-    setSelectedMember(null)
-    setShowRemoveConfirm(false)
-  }
-
-  if (selectedTeam) {
-    const members = getMembers(selectedTeam)
-    
-    return (
-      <div className="relative">
-        {toastMsg && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-4 py-2 rounded-lg shadow-xl text-sm font-bold flex items-center gap-2 z-50 animate-in slide-in-from-top-4">
-            <CheckCircle2 className="h-4 w-4 text-emerald-400" /> {toastMsg}
-          </div>
-        )}
-
-        <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden min-h-[500px]">
-          <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-            <div className="flex items-center gap-4">
-              <button onClick={() => { setSelectedTeam(null); setSelectedMember(null); setPanelMode(null); }} className="text-slate-500 hover:text-indigo-600 text-sm font-semibold flex items-center gap-1">← Back</button>
-              <h3 className="font-bold text-slate-900">{selectedTeam} Members</h3>
-            </div>
-            <button onClick={() => { setPanelMode("add"); setSelectedMember(null); }} className="flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors">
-              <UserPlus className="h-4 w-4" /> Add Member
-            </button>
-          </div>
-          <div className="divide-y divide-slate-100">
-            {members.map(m => (
-              <div 
-                key={m.id} 
-                onClick={() => { setSelectedMember(m); setPanelMode("activity"); setShowRemoveConfirm(false); }}
-                className="p-5 flex items-center justify-between hover:bg-slate-50 transition-colors cursor-pointer group"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="relative">
-                    <div className="w-10 h-10 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-600 font-bold">
-                      {m.name.charAt(0)}
-                    </div>
-                    <span className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${
-                      m.status === 'online' ? 'bg-emerald-500' : m.status === 'away' ? 'bg-amber-500' : 'bg-slate-300'
-                    }`}></span>
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">{m.name}</h4>
-                    <p className="text-xs text-slate-500 mt-0.5">{m.role}</p>
-                  </div>
-                </div>
-                <div className="text-right flex items-center gap-4">
-                  <div>
-                    <div className="text-sm font-medium text-slate-600 capitalize">{m.status}</div>
-                    <div className="text-[10px] text-slate-400 mt-0.5">{m.lastActive}</div>
-                  </div>
-                  <button onClick={(e) => { e.stopPropagation(); setSelectedMember(m); setPanelMode("manage"); setShowRemoveConfirm(false); }} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors ml-2">
-                    <Edit2 className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Slide-Over Panel */}
-        {(panelMode === "activity" || panelMode === "manage" || panelMode === "add") && (
-          <div className="absolute inset-y-0 right-0 w-[380px] bg-white border-l border-slate-200 shadow-2xl flex flex-col animate-in slide-in-from-right-8 z-10 rounded-r-xl">
-            
-            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-              <div>
-                <h3 className="font-bold text-slate-900">
-                  {panelMode === "add" ? "Add New Member" : selectedMember?.name}
-                </h3>
-                {panelMode !== "add" && <p className="text-xs text-slate-500">{selectedMember?.role}</p>}
-              </div>
-              <button onClick={(e) => { e.stopPropagation(); setPanelMode(null); setSelectedMember(null); }} className="text-slate-400 hover:text-rose-600 text-xl font-bold px-2 py-1 rounded-lg hover:bg-rose-50 transition-colors">×</button>
-            </div>
-
-            {/* Sub-tabs if viewing an existing member */}
-            {panelMode !== "add" && (
-              <div className="flex border-b border-slate-100">
-                <button onClick={() => setPanelMode("activity")} className={`flex-1 py-3 text-sm font-bold border-b-2 ${panelMode === 'activity' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}>Activity</button>
-                <button onClick={() => setPanelMode("manage")} className={`flex-1 py-3 text-sm font-bold border-b-2 ${panelMode === 'manage' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}>Manage Access</button>
-              </div>
-            )}
-
-            <div className="p-5 flex-1 overflow-y-auto bg-slate-50/30">
-              
-              {/* ACTIVITY VIEW */}
-              {panelMode === "activity" && selectedMember && (
-                <div>
-                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-5">Recent Work</h4>
-                  <div className="space-y-0">
-                    {selectedMember.actions.map((act: string, idx: number) => (
-                      <div key={idx} className="flex gap-4">
-                        <div className="flex flex-col items-center">
-                          <div className="w-2.5 h-2.5 rounded-full bg-indigo-400 mt-1.5 shadow-sm"></div>
-                          {idx !== selectedMember.actions.length - 1 && <div className="w-px h-10 bg-slate-200 my-1"></div>}
-                        </div>
-                        <p className="text-sm text-slate-700 pb-4 leading-relaxed">{act}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* MANAGE OR ADD VIEW */}
-              {(panelMode === "manage" || panelMode === "add") && (
-                <div className="space-y-6">
-                  {panelMode === "add" && (
-                    <>
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">Email Address</label>
-                        <input type="email" placeholder="staff@simulafly.com" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500" />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">Full Name</label>
-                        <input type="text" placeholder="John Doe" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500" />
-                      </div>
-                    </>
-                  )}
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide flex justify-between">
-                      Discord-Style Role
-                      <span className="text-indigo-600 font-medium">RBAC Level</span>
-                    </label>
-                    <select defaultValue={panelMode === "manage" ? selectedMember.role : "L1 Agent"} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
-                      <option>Org Manager (Root)</option>
-                      <option>Support Lead</option>
-                      <option>Finance Lead</option>
-                      <option>Operations Lead</option>
-                      <option>L1 Agent</option>
-                      <option>L2 Agent</option>
-                    </select>
-                    <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">This determines their permissions across the platform (View, Edit, Approve).</p>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">Team Group</label>
-                    <select defaultValue={selectedTeam} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
-                      {teams.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
-                    </select>
-                  </div>
-
-                  {panelMode === "manage" && (
-                    <div className="pt-6 border-t border-slate-200 mt-6">
-                      {!showRemoveConfirm ? (
-                        <button onClick={() => setShowRemoveConfirm(true)} className="w-full py-2.5 border border-rose-200 text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-lg text-sm font-bold transition-colors">
-                          Remove Member from Organization
-                        </button>
-                      ) : (
-                        <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 animate-in zoom-in-95">
-                          <h4 className="font-bold text-rose-800 mb-1">Confirm Removal</h4>
-                          <p className="text-xs text-rose-600 mb-4 leading-relaxed">This will revoke all access immediately. An email will be sent to the user, and all Org Managers will be notified.</p>
-                          <div className="flex gap-2">
-                            <button onClick={() => setShowRemoveConfirm(false)} className="flex-1 py-2 bg-white border border-rose-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-50">Cancel</button>
-                            <button onClick={() => handleActionToast("Member removed. Notifications sent.")} className="flex-1 py-2 bg-rose-600 text-white rounded-lg text-xs font-bold hover:bg-rose-700 shadow-sm">Confirm</button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {(!showRemoveConfirm) && (
-                     <div className="pt-4">
-                       <button onClick={() => handleActionToast(panelMode === "add" ? "Invitation sent to new member." : "Access updated. Org Managers notified.")} className="w-full py-2.5 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg text-sm font-bold shadow-sm transition-colors">
-                         {panelMode === "add" ? "Send Invite" : "Save Access Changes"}
-                       </button>
-                     </div>
-                  )}
-
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-    )
+  async function toggleActive(a: AccountListItem) {
+    setBusyId(a.id)
+    try {
+      if (a.is_active) await deactivateAccount(a.id)
+      else await reactivateAccount(a.id)
+      load()
+    } catch {
+      /* refetch on next load */
+    } finally {
+      setBusyId(null)
+    }
   }
 
   return (
     <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
       <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-        <h3 className="font-bold text-slate-900">Department Directory</h3>
-        <button className="flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors">
-          <Plus className="h-4 w-4" /> New Team
+        <h3 className="font-bold text-slate-900">Admin Accounts</h3>
+        <button onClick={() => setInviteOpen(true)} className="flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors">
+          <UserPlus className="h-4 w-4" /> Invite Admin
         </button>
       </div>
-      <div className="divide-y divide-slate-100">
-        {teams.map((t, i) => (
-          <div key={i} onClick={() => setSelectedTeam(t.name)} className="p-5 flex items-center justify-between hover:bg-slate-50 transition-colors cursor-pointer group">
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 font-bold group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors">
-                {t.name.charAt(0)}
+
+      {error && (
+        <div className="p-8 text-center text-sm text-slate-400 font-medium">Unable to load admin accounts.</div>
+      )}
+      {!error && accounts === null && (
+        <div className="p-8 text-center text-sm text-slate-400 font-medium">Loading accounts…</div>
+      )}
+      {!error && accounts !== null && accounts.length === 0 && (
+        <div className="p-8 text-center text-sm text-slate-400 font-medium">No admin accounts found.</div>
+      )}
+
+      {!error && accounts !== null && accounts.length > 0 && (
+        <div className="divide-y divide-slate-100">
+          {accounts.map((a) => (
+            <div key={a.id} className="p-5 flex items-center justify-between hover:bg-slate-50 transition-colors group">
+              <div className="flex items-center gap-4">
+                <div className="relative">
+                  <div className="w-10 h-10 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-600 font-bold uppercase">
+                    {a.email.charAt(0)}
+                  </div>
+                  <span className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${a.is_active ? 'bg-emerald-500' : 'bg-slate-300'}`}></span>
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-900">{a.email}</h4>
+                  <p className="text-xs text-slate-500 mt-0.5">{a.role_names.length > 0 ? a.role_names.join(", ") : "No roles assigned"}</p>
+                </div>
               </div>
-              <div>
-                <h4 className="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">{t.name}</h4>
-                <p className="text-xs text-slate-500 mt-0.5">Lead: {t.lead}</p>
+              <div className="flex items-center gap-4">
+                <div className={`text-sm font-medium capitalize ${a.is_active ? 'text-emerald-600' : 'text-slate-400'}`}>
+                  {a.is_active ? "Active" : "Inactive"}
+                </div>
+                <button
+                  onClick={() => toggleActive(a)}
+                  disabled={busyId === a.id}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors disabled:opacity-50 ${
+                    a.is_active ? 'text-rose-600 bg-rose-50 hover:bg-rose-100' : 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100'
+                  }`}
+                >
+                  {busyId === a.id ? "…" : a.is_active ? "Deactivate" : "Reactivate"}
+                </button>
               </div>
             </div>
-            <div className="flex items-center gap-4">
-              <div className="text-sm font-semibold text-slate-600">{t.count} Members</div>
-              <button className="text-slate-400 group-hover:text-indigo-600 transition-colors"><Eye className="h-4 w-4"/></button>
+          ))}
+        </div>
+      )}
+
+      {inviteOpen && (
+        <InviteAdminModal
+          onClose={() => setInviteOpen(false)}
+          onInvited={() => { setInviteOpen(false); load() }}
+        />
+      )}
+    </div>
+  )
+}
+
+function InviteAdminModal({ onClose, onInvited }: { onClose: () => void; onInvited: () => void }) {
+  const [roles, setRoles] = useState<RoleResponse[] | null>(null)
+  const [email, setEmail] = useState("")
+  const [selectedRoles, setSelectedRoles] = useState<string[]>([])
+  const [submitting, setSubmitting] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const [result, setResult] = useState<InvitationCreateResponse | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    listRoles()
+      .then((res) => { if (!cancelled) setRoles(res.roles) })
+      .catch(() => { if (!cancelled) setRoles([]) })
+    return () => { cancelled = true }
+  }, [])
+
+  const toggleRole = (id: string) =>
+    setSelectedRoles((prev) => (prev.includes(id) ? prev.filter((r) => r !== id) : [...prev, id]))
+
+  async function submit() {
+    setErr(null)
+    if (!email.trim()) { setErr("Enter an email address."); return }
+    if (selectedRoles.length === 0) { setErr("Select at least one role."); return }
+    setSubmitting(true)
+    try {
+      const res = await createInvitation(email.trim(), selectedRoles)
+      setResult(res)
+    } catch (e: any) {
+      setErr(e?.message || "Failed to create invitation.")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const activationLink =
+    result && typeof window !== "undefined"
+      ? `${window.location.origin}/activate?invitation_token=${encodeURIComponent(result.token)}`
+      : ""
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md border border-slate-200 overflow-hidden">
+        <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+          <h3 className="font-bold text-slate-900 flex items-center gap-2"><UserPlus className="h-5 w-5 text-indigo-600" /> Invite Admin</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-rose-600 text-xl font-bold px-2 py-1 rounded-lg hover:bg-rose-50 transition-colors">×</button>
+        </div>
+
+        {result ? (
+          <div className="p-5 space-y-4">
+            <div className="px-3 py-2 bg-emerald-50 border border-emerald-100 rounded-lg text-sm text-emerald-700 font-medium">
+              Invitation created for <strong>{result.email}</strong>. Share this single-use activation link (it is shown only once):
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">Activation Link</label>
+              <textarea readOnly value={activationLink} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono text-slate-700 h-20 outline-none" onFocus={(e) => e.currentTarget.select()} />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">Raw Token</label>
+              <input readOnly value={result.token} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono text-slate-700 outline-none" onFocus={(e) => e.currentTarget.select()} />
+            </div>
+            <p className="text-xs text-slate-500">Expires {new Date(result.expires_at).toLocaleString()}.</p>
+            <div className="pt-2 flex justify-end">
+              <button onClick={onInvited} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold shadow-sm hover:bg-indigo-700 transition-colors">Done</button>
             </div>
           </div>
-        ))}
+        ) : (
+          <>
+            <div className="p-5 space-y-4">
+              {err && (
+                <div className="px-3 py-2 bg-rose-50 border border-rose-100 rounded-lg text-sm text-rose-600">{err}</div>
+              )}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">Email Address</label>
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="newadmin@simulafly.com" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-2 uppercase tracking-wide">Assign Roles</label>
+                {roles === null ? (
+                  <div className="text-sm text-slate-400">Loading roles…</div>
+                ) : roles.length === 0 ? (
+                  <div className="text-sm text-slate-400">No roles available.</div>
+                ) : (
+                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                    {roles.map((r) => (
+                      <label key={r.id} className="flex items-center gap-3 p-2.5 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50">
+                        <input type="checkbox" checked={selectedRoles.includes(r.id)} onChange={() => toggleRole(r.id)} className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500" />
+                        <div>
+                          <div className="text-sm font-semibold text-slate-900">{r.name}</div>
+                          {r.description && <div className="text-xs text-slate-500">{r.description}</div>}
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="p-5 border-t border-slate-100 bg-slate-50 flex items-center justify-end gap-3">
+              <button onClick={onClose} disabled={submitting} className="px-4 py-2 text-sm font-bold text-slate-600 hover:text-slate-900 transition-colors disabled:opacity-50">Cancel</button>
+              <button onClick={submit} disabled={submitting} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold shadow-sm hover:bg-indigo-700 transition-colors disabled:opacity-50">
+                {submitting ? "Inviting…" : "Send Invitation"}
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
@@ -533,6 +543,24 @@ function TabSecurity() {
 }
 
 function TabAudit() {
+  const [entries, setEntries] = useState<AuditEntry[] | null>(null)
+  const [error, setError] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    listAudit({ page_size: 50 })
+      .then((res) => { if (!cancelled) setEntries(res.items) })
+      .catch(() => { if (!cancelled) setError(true) })
+    return () => { cancelled = true }
+  }, [])
+
+  const fmtTime = (iso: string) => {
+    const d = new Date(iso)
+    return isNaN(d.getTime()) ? iso : d.toLocaleString()
+  }
+  const target = (e: AuditEntry) =>
+    [e.target_type, e.target_id].filter(Boolean).join(" ").replace(/_/g, " ") || "—"
+
   return (
     <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
       <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
@@ -553,22 +581,26 @@ function TabAudit() {
               <th className="px-6 py-4">Actor</th>
               <th className="px-6 py-4">Target Entity</th>
               <th className="px-6 py-4">Action</th>
-              <th className="px-6 py-4">IP Address</th>
+              <th className="px-6 py-4">Outcome</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {[
-              { d: "Today, 14:22", u: "Nia R. (Org Mgr)", t: "Role: Finance Lead", a: "Updated permissions (Added Approve)", ip: "192.168.1.42" },
-              { d: "Today, 11:05", u: "System", t: "Store STR-004", a: "Auto-frozen due to massive refund spike", ip: "Internal" },
-              { d: "Yesterday", u: "Marcus T. (Finance)", t: "Merchant M-8922", a: "Approved manual withdrawal of ₹12.5L", ip: "192.168.1.112" },
-              { d: "14/03/2026", u: "David K. (Ops)", t: "Product PRD-119", a: "Force delisted (Policy Violation)", ip: "192.168.1.88" },
-            ].map((log, i) => (
-              <tr key={i} className="hover:bg-slate-50">
-                <td className="px-6 py-4 text-xs font-mono text-slate-500">{log.d}</td>
-                <td className="px-6 py-4 font-bold text-slate-900">{log.u}</td>
-                <td className="px-6 py-4 font-medium text-indigo-600">{log.t}</td>
-                <td className="px-6 py-4 text-slate-700">{log.a}</td>
-                <td className="px-6 py-4 text-xs font-mono text-slate-400">{log.ip}</td>
+            {error && (
+              <tr><td colSpan={5} className="px-6 py-10 text-center text-slate-400 font-medium">Unable to load audit log.</td></tr>
+            )}
+            {!error && entries === null && (
+              <tr><td colSpan={5} className="px-6 py-10 text-center text-slate-400 font-medium">Loading audit log…</td></tr>
+            )}
+            {!error && entries !== null && entries.length === 0 && (
+              <tr><td colSpan={5} className="px-6 py-10 text-center text-slate-400 font-medium">No audit entries yet.</td></tr>
+            )}
+            {!error && entries !== null && entries.map((log) => (
+              <tr key={log.id} className="hover:bg-slate-50">
+                <td className="px-6 py-4 text-xs font-mono text-slate-500">{fmtTime(log.created_at)}</td>
+                <td className="px-6 py-4 font-bold text-slate-900">{log.actor_admin_id ? log.actor_admin_id.slice(0, 8) : "System"}</td>
+                <td className="px-6 py-4 font-medium text-indigo-600 capitalize">{target(log)}</td>
+                <td className="px-6 py-4 text-slate-700">{log.action.replace(/[._]/g, " ")}</td>
+                <td className="px-6 py-4 text-xs font-mono text-slate-400 capitalize">{log.outcome}</td>
               </tr>
             ))}
           </tbody>

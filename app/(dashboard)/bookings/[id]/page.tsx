@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ArrowLeft, User, Store, Building2, Wallet, Headset, Package, CheckCircle2, Clock, Truck, AlertCircle, Eye, Phone, Percent, ArrowRight, DollarSign } from "lucide-react"
+import { ArrowLeft, User, Store, Building2, Wallet, Headset, Package, CheckCircle2, Clock, Truck, AlertCircle, Eye, Phone, Percent, ArrowRight, IndianRupee } from "lucide-react"
 import Link from "next/link"
 
 export default function BookingProfile({ params }: { params: { id: string } }) {
@@ -144,7 +144,7 @@ export default function BookingProfile({ params }: { params: { id: string } }) {
               <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
                 <div>
                   <h3 className="text-lg font-bold text-white flex items-center gap-2 mb-2">
-                    <DollarSign className="h-5 w-5 text-emerald-400" />
+                    <IndianRupee className="h-5 w-5 text-emerald-400" />
                     Booking Fee Deduction
                   </h3>
                   <p className="text-indigo-200 text-sm font-medium max-w-md">

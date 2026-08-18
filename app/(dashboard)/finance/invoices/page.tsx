@@ -1,23 +1,120 @@
 "use client"
 
-import { useState } from "react"
-import { FileText, Download, Search, Filter, ArrowRight, Building2, CreditCard, CheckCircle2, Clock, XCircle } from "lucide-react"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import {
+  FileText,
+  Search,
+  Loader2,
+  Building2,
+  CheckCircle2,
+  Clock,
+  AlertTriangle,
+} from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { EmptyState } from "@/components/ui/empty-state"
+import {
+  listInvoices,
+  markInvoicePaid,
+  formatINR,
+  type InvoiceListItem,
+} from "@/lib/api/finance"
+import { ApiError } from "@/lib/api/types"
+
+const PAGE_SIZE = 25
+
+const STATUS_FILTERS: { label: string; value: string | undefined }[] = [
+  { label: "All", value: undefined },
+  { label: "Unpaid", value: "unpaid" },
+  { label: "Paid", value: "paid" },
+]
+
+function formatDate(iso: string): string {
+  try {
+    return new Date(iso).toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    })
+  } catch {
+    return iso
+  }
+}
+
+function statusBadge(status: string): string {
+  const s = status.toLowerCase()
+  if (s === "paid") return "bg-emerald-50 border-emerald-200 text-emerald-700"
+  if (s === "unpaid") return "bg-amber-50 border-amber-200 text-amber-700"
+  return "bg-slate-100 border-slate-200 text-slate-700"
+}
 
 export default function InvoicesPage() {
-  const [activeFilter, setActiveFilter] = useState("all")
+  const [invoices, setInvoices] = useState<InvoiceListItem[]>([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
+  const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined)
+  const [search, setSearch] = useState("")
+  const [debounced, setDebounced] = useState("")
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [busyId, setBusyId] = useState<string | null>(null)
 
-  // Mock data for wallet recharges by merchants
-  const invoices = [
-    { id: "INV-2026-0891", merchant: "Royal Electronics", amount: "₹50,000", date: "Today, 10:45 AM", method: "Bank Transfer", status: "Completed", type: "Wallet Recharge" },
-    { id: "INV-2026-0890", merchant: "SneakerHead India", amount: "₹15,000", date: "Today, 09:12 AM", method: "Credit Card", status: "Completed", type: "Wallet Recharge" },
-    { id: "INV-2026-0889", merchant: "Urban Grocers", amount: "₹5,000", date: "Yesterday, 16:30 PM", method: "UPI", status: "Pending", type: "Wallet Recharge" },
-    { id: "INV-2026-0888", merchant: "TechFix Solutions", amount: "₹25,000", date: "Yesterday, 11:20 AM", method: "Bank Transfer", status: "Completed", type: "Wallet Recharge" },
-    { id: "INV-2026-0887", merchant: "Bella Boutique", amount: "₹10,000", date: "14/03/2026", method: "Debit Card", status: "Failed", type: "Wallet Recharge" },
-    { id: "INV-2026-0886", merchant: "Fresh Foods Market", amount: "₹1,00,000", date: "12/03/2026", method: "Bank Transfer", status: "Completed", type: "Wallet Recharge" },
-    { id: "INV-2026-0885", merchant: "Style Hub Trends", amount: "₹8,500", date: "10/03/2026", method: "UPI", status: "Completed", type: "Wallet Recharge" },
-  ]
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebounced(search)
+      setPage(1)
+    }, 350)
+    return () => clearTimeout(t)
+  }, [search])
 
-  const filteredInvoices = activeFilter === "all" ? invoices : invoices.filter(inv => inv.status.toLowerCase() === activeFilter.toLowerCase())
+  const fetchInvoices = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await listInvoices({
+        page,
+        page_size: PAGE_SIZE,
+        status: statusFilter,
+        search: debounced || undefined,
+      })
+      setInvoices(res.items)
+      setTotal(res.total)
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "Failed to load invoices from the server."
+      )
+      setInvoices([])
+    } finally {
+      setLoading(false)
+    }
+  }, [page, statusFilter, debounced])
+
+  useEffect(() => {
+    void fetchInvoices()
+  }, [fetchInvoices])
+
+  const totalPages = useMemo(
+    () => Math.max(1, Math.ceil(total / PAGE_SIZE)),
+    [total]
+  )
+
+  async function handleMarkPaid(inv: InvoiceListItem) {
+    setBusyId(inv.id)
+    setError(null)
+    try {
+      await markInvoicePaid(inv.id)
+      await fetchInvoices()
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "Failed to mark the invoice as paid."
+      )
+    } finally {
+      setBusyId(null)
+    }
+  }
 
   return (
     <div className="p-6 max-w-[1600px] mx-auto pb-24 animate-in fade-in duration-500 space-y-6">
@@ -25,127 +122,187 @@ export default function InvoicesPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
             <FileText className="h-6 w-6 text-indigo-600" />
-            Wallet Recharge Invoices
+            Invoices
           </h1>
-          <p className="text-sm text-slate-500 mt-1">Manage and track wallet top-up invoices across all merchants.</p>
-        </div>
-        <button className="inline-flex h-9 items-center gap-2 px-4 rounded-lg bg-white border border-slate-200 text-slate-700 text-sm font-semibold shadow-sm hover:bg-slate-50 transition-colors">
-          <Download className="h-4 w-4" /> Export All
-        </button>
-      </div>
-
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
-          <div>
-            <div className="text-sm font-semibold text-slate-600">Total Recharges (MTD)</div>
-            <div className="text-2xl font-bold text-slate-900 mt-1">₹14,50,000</div>
-          </div>
-          <div className="p-3 rounded-xl bg-emerald-50 text-emerald-600"><CheckCircle2 className="h-6 w-6" /></div>
-        </div>
-        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
-          <div>
-            <div className="text-sm font-semibold text-slate-600">Pending Approvals</div>
-            <div className="text-2xl font-bold text-slate-900 mt-1">₹45,000</div>
-          </div>
-          <div className="p-3 rounded-xl bg-amber-50 text-amber-600"><Clock className="h-6 w-6" /></div>
-        </div>
-        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
-          <div>
-            <div className="text-sm font-semibold text-slate-600">Failed Transactions</div>
-            <div className="text-2xl font-bold text-slate-900 mt-1">12</div>
-          </div>
-          <div className="p-3 rounded-xl bg-rose-50 text-rose-600"><XCircle className="h-6 w-6" /></div>
+          <p className="text-sm text-slate-500 mt-1">
+            Merchant invoices (INR) · {total.toLocaleString("en-IN")} total
+          </p>
         </div>
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
         {/* Controls */}
-        <div className="p-5 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-slate-50/50">
-          <div className="flex items-center gap-2">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <input type="text" placeholder="Search invoices or merchants..." className="pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none w-72 bg-white shadow-sm" />
-            </div>
-            <button className="p-2 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 bg-white shadow-sm"><Filter className="h-4 w-4" /></button>
+        <div className="p-4 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+            <Input
+              type="search"
+              placeholder="Search invoice or merchant…"
+              className="pl-9 bg-slate-50 border-slate-200 text-sm"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
           </div>
 
           <div className="flex items-center bg-slate-100/80 p-1 rounded-xl border border-slate-200/50">
-            {["All", "Completed", "Pending", "Failed"].map(filter => (
-              <button
-                key={filter}
-                onClick={() => setActiveFilter(filter.toLowerCase())}
-                className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all duration-200 ${
-                  activeFilter === filter.toLowerCase() 
-                    ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/50' 
-                    : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
-                }`}
-              >
-                {filter}
-              </button>
-            ))}
+            {STATUS_FILTERS.map((f) => {
+              const active = statusFilter === f.value
+              return (
+                <button
+                  key={f.label}
+                  onClick={() => {
+                    setStatusFilter(f.value)
+                    setPage(1)
+                  }}
+                  className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all duration-200 ${
+                    active
+                      ? "bg-white text-indigo-600 shadow-sm border border-slate-200/50"
+                      : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
+                  }`}
+                >
+                  {f.label}
+                </button>
+              )
+            })}
           </div>
         </div>
 
-        {/* Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead className="text-xs text-slate-500 bg-white border-b border-slate-200 uppercase font-semibold">
-              <tr>
-                <th className="px-6 py-4">Invoice ID</th>
-                <th className="px-6 py-4">Merchant</th>
-                <th className="px-6 py-4">Date</th>
-                <th className="px-6 py-4">Amount</th>
-                <th className="px-6 py-4">Method</th>
-                <th className="px-6 py-4">Status</th>
-                <th className="px-6 py-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredInvoices.map((inv) => (
-                <tr key={inv.id} className="hover:bg-slate-50 transition-colors group">
-                  <td className="px-6 py-4 font-mono font-medium text-indigo-600">{inv.id}</td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-2">
-                      <Building2 className="h-4 w-4 text-slate-400" />
-                      <span className="font-semibold text-slate-900">{inv.merchant}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 text-slate-500">{inv.date}</td>
-                  <td className="px-6 py-4 font-mono font-bold text-slate-900">{inv.amount}</td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-1.5 text-slate-600">
-                      <CreditCard className="h-4 w-4 text-slate-400" />
-                      {inv.method}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold border ${
-                      inv.status === "Completed" ? 'bg-emerald-50 border-emerald-200 text-emerald-700' :
-                      inv.status === "Pending" ? 'bg-amber-50 border-amber-200 text-amber-700' :
-                      'bg-rose-50 border-rose-200 text-rose-700'
-                    }`}>
-                      {inv.status === "Completed" && <CheckCircle2 className="h-3.5 w-3.5" />}
-                      {inv.status === "Pending" && <Clock className="h-3.5 w-3.5" />}
-                      {inv.status === "Failed" && <XCircle className="h-3.5 w-3.5" />}
-                      {inv.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <button className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Download">
-                        <Download className="h-4 w-4" />
-                      </button>
-                      <button className="p-1.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors" title="View Details">
-                        <ArrowRight className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </td>
+        {error ? (
+          <div className="p-6 text-sm text-rose-600 bg-rose-50 border-b border-rose-100">
+            {error}
+          </div>
+        ) : null}
+
+        {loading ? (
+          <div className="flex items-center justify-center gap-2 py-16 text-slate-400">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            <span className="text-sm font-medium">Loading invoices…</span>
+          </div>
+        ) : invoices.length === 0 ? (
+          <EmptyState
+            icon={FileText}
+            title="No invoices found"
+            description="No invoices match your current filters."
+            actionLabel={statusFilter || search ? "Clear filters" : undefined}
+            onAction={
+              statusFilter || search
+                ? () => {
+                    setStatusFilter(undefined)
+                    setSearch("")
+                  }
+                : undefined
+            }
+          />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left">
+              <thead className="text-xs text-slate-500 bg-slate-50 border-b border-slate-200 uppercase font-semibold">
+                <tr>
+                  <th className="px-6 py-4">Invoice</th>
+                  <th className="px-6 py-4">Merchant</th>
+                  <th className="px-6 py-4">Issued</th>
+                  <th className="px-6 py-4">Due</th>
+                  <th className="px-6 py-4">Amount</th>
+                  <th className="px-6 py-4">Status</th>
+                  <th className="px-6 py-4 text-right">Action</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {invoices.map((inv) => (
+                  <tr key={inv.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-6 py-4 font-mono font-medium text-indigo-600">
+                      {inv.number}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        <Building2 className="h-4 w-4 text-slate-400" />
+                        <span className="font-semibold text-slate-900">
+                          {inv.merchant_name || "—"}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-slate-500">
+                      {formatDate(inv.issue_date)}
+                    </td>
+                    <td
+                      className={`px-6 py-4 font-medium ${
+                        inv.overdue ? "text-rose-600" : "text-slate-500"
+                      }`}
+                    >
+                      {inv.overdue && (
+                        <AlertTriangle className="inline-block h-3 w-3 mr-1" />
+                      )}
+                      {formatDate(inv.due_date)}
+                    </td>
+                    <td className="px-6 py-4 font-mono font-bold text-slate-900">
+                      {formatINR(inv.amount)}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold border capitalize ${statusBadge(
+                            inv.status
+                          )}`}
+                        >
+                          {inv.status === "paid" ? (
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                          ) : (
+                            <Clock className="h-3.5 w-3.5" />
+                          )}
+                          {inv.status}
+                        </span>
+                        {inv.overdue ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold border border-rose-200 bg-rose-50 text-rose-700 uppercase tracking-wider">
+                            Overdue
+                          </span>
+                        ) : null}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      {inv.status === "paid" ? (
+                        <span className="text-xs font-medium text-slate-400">
+                          Settled
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => handleMarkPaid(inv)}
+                          disabled={busyId === inv.id}
+                          className="inline-flex h-8 items-center justify-center rounded-lg px-3 text-xs font-bold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 transition-colors disabled:opacity-50"
+                        >
+                          {busyId === inv.id ? "…" : "Mark Paid"}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {!loading && invoices.length > 0 && (
+          <div className="p-4 border-t border-slate-200 flex items-center justify-between text-sm text-slate-500 bg-slate-50">
+            <span>
+              Page {page} of {totalPages} · {total.toLocaleString("en-IN")} invoices
+            </span>
+            <div className="flex gap-1">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="px-2 py-1 bg-white border border-slate-200 rounded hover:bg-slate-50 disabled:opacity-40"
+              >
+                &lt;
+              </button>
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages}
+                className="px-2 py-1 bg-white border border-slate-200 rounded hover:bg-slate-50 disabled:opacity-40"
+              >
+                &gt;
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

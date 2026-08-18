@@ -1,7 +1,7 @@
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { GitBranch, MapPin, Target, TrendingUp, Users, DollarSign } from "lucide-react"
+import { GitBranch, MapPin, Target, TrendingUp, Users, IndianRupee } from "lucide-react"
 
 export default function UserAttribution() {
   return (
@@ -16,7 +16,7 @@ export default function UserAttribution() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
           { label: "Tracked Users", val: "1,42,800", icon: Users, color: "text-blue-700 bg-blue-50" },
-          { label: "Cost Per Acquisition", val: "₹142", icon: DollarSign, color: "text-red-700 bg-red-50" },
+          { label: "Cost Per Acquisition", val: "₹142", icon: IndianRupee, color: "text-red-700 bg-red-50" },
           { label: "Highest LTV Source", val: "Merchant Referral", icon: TrendingUp, color: "text-emerald-700 bg-emerald-50" },
           { label: "Unattributed", val: "12%", icon: Target, color: "text-slate-700 bg-slate-50" },
         ].map(k => (
