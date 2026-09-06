@@ -30,7 +30,7 @@ export function Header() {
             "Updated 'Standard Booking Fee' to ₹100 (Flat)",
             "Modified 'Large Order Fee' threshold to ≥ ₹5,000",
             "Enabled AI Visualization Pricing Module",
-            "Set Tier 1 Buyer Intel Unlock to ₹30"
+            "Set Buyer Intel Unlock to ₹50"
           ]
         },
         ...prev
