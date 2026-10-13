@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
-import { Building2, ShieldCheck, ShieldAlert, Wallet, Store, MapPin, Mail, Phone, Calendar, FileText, AlertTriangle, Headset, Package, ExternalLink, Download, IndianRupee, Loader2 } from "lucide-react"
-import { getMerchant, listMerchants } from "@/lib/api/directory"
+import { Building2, ShieldCheck, ShieldAlert, Wallet, Store, MapPin, Mail, Phone, Calendar, FileText, AlertTriangle, Headset, Package, ExternalLink, Download, IndianRupee, Loader2, Plus, Ban, PlayCircle, X } from "lucide-react"
+import { activateMerchant, createMerchantShop, getMerchant, listMerchants, suspendMerchant } from "@/lib/api/directory"
 import type { MerchantDetail } from "@/lib/api/directory"
 import type { MerchantListItem } from "@/lib/api/types"
 import { adjustWallet, getWalletTransactions, listInvoices, formatINR, toNumber } from "@/lib/api/finance"
@@ -59,6 +59,8 @@ export default function MerchantProfile() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [notFound, setNotFound] = useState(false)
+  const [statusBusy, setStatusBusy] = useState(false)
+  const [statusError, setStatusError] = useState<string | null>(null)
 
   const fetchMerchant = useCallback(async () => {
     if (!id) return
@@ -85,6 +87,23 @@ export default function MerchantProfile() {
   useEffect(() => {
     void fetchMerchant()
   }, [fetchMerchant])
+
+  async function toggleMerchantStatus() {
+    if (!merchant) return
+    if (merchant.status !== "suspended" && !window.confirm(`Suspend ${merchant.display_name}? It will stop appearing in the app.`)) return
+    setStatusBusy(true)
+    setStatusError(null)
+    try {
+      const response = merchant.status === "suspended"
+        ? await activateMerchant(merchant.id)
+        : await suspendMerchant(merchant.id)
+      setMerchant({ ...merchant, status: response.status })
+    } catch (err) {
+      setStatusError(err instanceof ApiError ? err.message : "Failed to update merchant status.")
+    } finally {
+      setStatusBusy(false)
+    }
+  }
 
   // Shops owned by this account = the "stores" for this merchant. Each merchant
   // row is a shop; they're linked by their owner (a member with role "owner").
@@ -231,6 +250,17 @@ export default function MerchantProfile() {
           </div>
 
         </div>
+        <div className="mt-5 pt-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <div className="text-sm font-bold text-slate-900">Merchant controls</div>
+            <div className="text-xs text-slate-500">Suspension is managed here from the merchant overview.</div>
+          </div>
+          <button onClick={() => void toggleMerchantStatus()} disabled={statusBusy} className={`inline-flex h-9 items-center justify-center gap-2 px-4 rounded-lg text-sm font-bold transition-colors disabled:opacity-50 ${merchant.status === "suspended" ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100" : "bg-rose-50 text-rose-700 hover:bg-rose-100"}`}>
+            {statusBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : merchant.status === "suspended" ? <PlayCircle className="h-4 w-4" /> : <Ban className="h-4 w-4" />}
+            {merchant.status === "suspended" ? "Activate Merchant" : "Suspend Merchant"}
+          </button>
+        </div>
+        {statusError ? <div className="mt-3 rounded-lg bg-rose-50 border border-rose-100 px-3 py-2 text-sm text-rose-600">{statusError}</div> : null}
       </div>
 
       {/* ── Tabs Engine ── */}
@@ -397,6 +427,39 @@ function TabOverview({ merchant, storeCount }: { merchant: MerchantDetail; store
       </div>
 
       <div className="border border-slate-200 rounded-xl overflow-hidden">
+        <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 font-bold text-sm text-slate-900 flex items-center justify-between gap-3">
+          <span className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-slate-400" /> KYC Details</span>
+          <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${merchant.kyc.completed ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{merchant.kyc.completed ? "Complete" : "Pending"}</span>
+        </div>
+        <div className="p-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="rounded-xl border border-slate-200 p-4">
+            <div className="font-bold text-sm text-slate-900 mb-3">Owner PAN verification</div>
+            {merchant.kyc.pan ? (
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <KycField label="PAN" value={merchant.kyc.pan.masked_pan} mono />
+                <KycField label="Category" value={merchant.kyc.pan.category} />
+                <KycField label="Verified name" value={merchant.kyc.pan.verified_name} wide />
+                <KycField label="Verified at" value={formatDateTime(merchant.kyc.pan.verified_at)} wide />
+              </div>
+            ) : <p className="text-sm text-slate-400">PAN verification has not been completed.</p>}
+          </div>
+          <div className="rounded-xl border border-slate-200 p-4">
+            <div className="font-bold text-sm text-slate-900 mb-3">Shop GSTIN verification</div>
+            {merchant.kyc.gstin ? (
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <KycField label="GSTIN" value={merchant.kyc.gstin.gstin} mono wide />
+                <KycField label="Legal name" value={merchant.kyc.gstin.legal_name} wide />
+                <KycField label="Registration" value={merchant.kyc.gstin.registration_status} />
+                <KycField label="State" value={[merchant.kyc.gstin.state_name, merchant.kyc.gstin.state_code].filter(Boolean).join(" · ") || "-"} />
+                <KycField label="Business nature" value={merchant.kyc.gstin.business_nature || "-"} wide />
+                <KycField label="Verified at" value={formatDateTime(merchant.kyc.gstin.verified_at)} wide />
+              </div>
+            ) : <p className="text-sm text-slate-400">GSTIN verification has not been completed for this shop.</p>}
+          </div>
+        </div>
+      </div>
+
+      <div className="border border-slate-200 rounded-xl overflow-hidden">
         <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 font-bold text-sm text-slate-900">Recent Global Orders</div>
         <div className="p-12 text-center text-slate-500 flex flex-col items-center">
           <Package className="h-10 w-10 text-slate-300 mb-3" />
@@ -408,12 +471,18 @@ function TabOverview({ merchant, storeCount }: { merchant: MerchantDetail; store
   )
 }
 
+function KycField({ label, value, mono = false, wide = false }: { label: string; value: string; mono?: boolean; wide?: boolean }) {
+  return <div className={wide ? "col-span-2" : ""}><div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">{label}</div><div className={`font-semibold text-slate-800 break-words ${mono ? "font-mono" : ""}`}>{value}</div></div>
+}
+
 function TabStores({ ownerUserId, currentId }: { ownerUserId: string | null; currentId: string }) {
   const [stores, setStores] = useState<MerchantListItem[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [addOpen, setAddOpen] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     if (!ownerUserId) { setStores([]); setTotal(0); setLoading(false); return }
@@ -437,7 +506,7 @@ function TabStores({ ownerUserId, currentId }: { ownerUserId: string | null; cur
     return () => {
       cancelled = true
     }
-  }, [ownerUserId, page])
+  }, [ownerUserId, page, reloadKey])
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
@@ -466,6 +535,10 @@ function TabStores({ ownerUserId, currentId }: { ownerUserId: string | null; cur
 
   return (
     <>
+      <div className="px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div><h3 className="font-bold text-slate-900">Owner&apos;s Shops</h3><p className="text-xs text-slate-500 mt-1">New shops start in trial status and require their own GSTIN verification.</p></div>
+        <button onClick={() => setAddOpen(true)} className="inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-700"><Plus className="h-4 w-4" /> Add Shop</button>
+      </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm text-left">
           <thead className="text-xs text-slate-500 bg-slate-50 border-b border-slate-200 uppercase font-semibold">
@@ -519,8 +592,70 @@ function TabStores({ ownerUserId, currentId }: { ownerUserId: string | null; cur
           </div>
         </div>
       )}
+      {addOpen ? <AddShopDialog merchantId={currentId} onClose={() => setAddOpen(false)} onSaved={() => { setAddOpen(false); setReloadKey((value) => value + 1) }} /> : null}
     </>
   )
+}
+
+function AddShopDialog({ merchantId, onClose, onSaved }: { merchantId: string; onClose: () => void; onSaved: () => void }) {
+  const [form, setForm] = useState({ display_name: "", legal_name: "", address: "", state: "", city: "", state_code: "", city_code: "", support_email: "", support_phone: "", range_km: "" })
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+
+  async function save() {
+    if (!form.display_name.trim() || !form.address.trim() || !form.state.trim() || !form.city.trim()) {
+      setSaveError("Shop name, address, state, and city are required.")
+      return
+    }
+    setSaving(true)
+    setSaveError(null)
+    try {
+      await createMerchantShop(merchantId, {
+        display_name: form.display_name.trim(),
+        legal_name: form.legal_name.trim() || undefined,
+        address: form.address.trim(),
+        state: form.state.trim(),
+        city: form.city.trim(),
+        state_code: form.state_code.trim().toUpperCase() || "DL",
+        city_code: form.city_code.trim().toUpperCase() || "N",
+        support_email: form.support_email.trim() || undefined,
+        support_phone: form.support_phone.trim() || undefined,
+        range_km: form.range_km ? Number(form.range_km) : undefined,
+      })
+      onSaved()
+    } catch (err) {
+      setSaveError(err instanceof ApiError ? err.message : "Failed to create shop.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const fieldClass = "w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" role="dialog" aria-modal="true" aria-label="Add shop">
+      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl max-h-[92vh] overflow-y-auto">
+        <div className="sticky top-0 bg-white p-5 border-b border-slate-100 flex items-center justify-between z-10"><div><h2 className="font-bold text-slate-900">Add Shop</h2><p className="text-xs text-slate-500 mt-1">Creates a new shop under the same owner and partner ID.</p></div><button onClick={onClose} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500"><X className="h-5 w-5" /></button></div>
+        <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {saveError ? <div className="sm:col-span-2 rounded-lg bg-rose-50 border border-rose-100 px-3 py-2 text-sm text-rose-600">{saveError}</div> : null}
+          <ShopField label="Shop name"><input value={form.display_name} onChange={(event) => setForm({ ...form, display_name: event.target.value })} className={fieldClass} /></ShopField>
+          <ShopField label="Legal name"><input value={form.legal_name} onChange={(event) => setForm({ ...form, legal_name: event.target.value })} placeholder="Inherit if blank" className={fieldClass} /></ShopField>
+          <ShopField label="Address" wide><input value={form.address} onChange={(event) => setForm({ ...form, address: event.target.value })} className={fieldClass} /></ShopField>
+          <ShopField label="State"><input value={form.state} onChange={(event) => setForm({ ...form, state: event.target.value })} className={fieldClass} /></ShopField>
+          <ShopField label="City"><input value={form.city} onChange={(event) => setForm({ ...form, city: event.target.value })} className={fieldClass} /></ShopField>
+          <ShopField label="State code"><input maxLength={2} value={form.state_code} onChange={(event) => setForm({ ...form, state_code: event.target.value })} placeholder="MH" className={fieldClass} /></ShopField>
+          <ShopField label="City code"><input maxLength={1} value={form.city_code} onChange={(event) => setForm({ ...form, city_code: event.target.value })} placeholder="M" className={fieldClass} /></ShopField>
+          <ShopField label="Support email"><input type="email" value={form.support_email} onChange={(event) => setForm({ ...form, support_email: event.target.value })} className={fieldClass} /></ShopField>
+          <ShopField label="Support phone"><input value={form.support_phone} onChange={(event) => setForm({ ...form, support_phone: event.target.value })} className={fieldClass} /></ShopField>
+          <ShopField label="Service radius (km)"><input type="number" min="0" value={form.range_km} onChange={(event) => setForm({ ...form, range_km: event.target.value })} className={fieldClass} /></ShopField>
+        </div>
+        <div className="sticky bottom-0 bg-slate-50 p-5 border-t border-slate-100 flex justify-end gap-3"><button onClick={onClose} disabled={saving} className="px-4 py-2 text-sm font-bold text-slate-600">Cancel</button><button onClick={() => void save()} disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Create Shop</button></div>
+      </div>
+    </div>
+  )
+}
+
+function ShopField({ label, wide = false, children }: { label: string; wide?: boolean; children: React.ReactNode }) {
+  return <label className={wide ? "sm:col-span-2" : ""}><span className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">{label}</span>{children}</label>
 }
 
 function TabWallet({ merchant }: { merchant: MerchantDetail }) {

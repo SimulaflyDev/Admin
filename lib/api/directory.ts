@@ -27,10 +27,14 @@ export interface StoreListItem {
 // we accept both and normalise at the call site.
 export interface ProductListItem {
   id: string
+  sku: string
   title: string
   merchant_id: string
   merchant_name?: string | null
   price?: number | string | null
+  category?: string | null
+  primary_image_url?: string | null
+  in_app_stock?: number | null
   status: string
   created_at: string
 }
@@ -77,6 +81,8 @@ export interface MerchantDetail {
   is_kyc_completed: boolean
   country: string
   address?: string | null
+  state?: string | null
+  city?: string | null
   latitude?: number | null
   longitude?: number | null
   range_km?: number | null
@@ -86,6 +92,29 @@ export interface MerchantDetail {
   updated_at: string
   members: MerchantMember[]
   wallet?: WalletSummary | null
+  kyc: MerchantKycDetail
+}
+
+export interface MerchantKycDetail {
+  completed: boolean
+  pan?: {
+    masked_pan: string
+    verified_name: string
+    category: string
+    provider_transaction_id?: string | null
+    verified_at: string
+  } | null
+  gstin?: {
+    gstin: string
+    legal_name: string
+    business_nature?: string | null
+    state_name?: string | null
+    state_code?: string | null
+    registration_status: string
+    registration_start_date?: string | null
+    provider_transaction_id?: string | null
+    verified_at: string
+  } | null
 }
 
 // Mirrors app/schemas/admin/products.py::ProductDetail.
@@ -101,6 +130,7 @@ export interface ProductDetail {
   brand?: string | null
   status: string
   primary_image_url?: string | null
+  additional_images: string[]
   has_simulafly_listing: boolean
   price?: number | string | null
   in_app_stock?: number | null
@@ -148,6 +178,8 @@ export interface MerchantListParams {
   partner_id?: string
   owner_user_id?: string
   primary_only?: boolean
+  state?: string
+  city?: string
 }
 
 export function listMerchants(
@@ -167,6 +199,31 @@ export function suspendMerchant(id: string): Promise<MerchantStatusResponse> {
 export function activateMerchant(id: string): Promise<MerchantStatusResponse> {
   return request<MerchantStatusResponse>(`/admin/merchants/${id}/activate`, {
     method: "POST",
+  })
+}
+
+export interface CreateShopPayload {
+  display_name: string
+  legal_name?: string
+  address: string
+  state: string
+  city: string
+  state_code?: string
+  city_code?: string
+  support_email?: string
+  support_phone?: string
+  latitude?: number
+  longitude?: number
+  range_km?: number
+}
+
+export function createMerchantShop(
+  merchantId: string,
+  payload: CreateShopPayload
+): Promise<MerchantListItem> {
+  return request<MerchantListItem>(`/admin/merchants/${merchantId}/shops`, {
+    method: "POST",
+    body: payload,
   })
 }
 
@@ -209,6 +266,50 @@ export interface ProductListParams {
   status?: string
   min_price?: number
   max_price?: number
+}
+
+export interface ProductMutationPayload {
+  merchant_id: string
+  sku: string
+  title: string
+  description?: string | null
+  category?: string | null
+  subcategory?: string | null
+  brand?: string | null
+  status?: ProductStatus
+  primary_image_url?: string | null
+  additional_images?: string[]
+  price?: number | null
+  in_app_stock?: number | null
+}
+
+export type ProductUpdatePayload = Partial<Omit<ProductMutationPayload, "merchant_id">>
+
+export function createProduct(payload: ProductMutationPayload): Promise<ProductDetail> {
+  return request<ProductDetail>("/admin/products", { method: "POST", body: payload })
+}
+
+export function bulkCreateProducts(
+  items: ProductMutationPayload[]
+): Promise<{ created: number; items: ProductDetail[] }> {
+  return request<{ created: number; items: ProductDetail[] }>("/admin/products/bulk", {
+    method: "POST",
+    body: { items },
+  })
+}
+
+export function updateProduct(
+  id: string,
+  payload: ProductUpdatePayload
+): Promise<ProductDetail> {
+  return request<ProductDetail>(`/admin/products/${id}`, {
+    method: "PATCH",
+    body: payload,
+  })
+}
+
+export function archiveProduct(id: string): Promise<null> {
+  return request<null>(`/admin/products/${id}`, { method: "DELETE" })
 }
 
 export function listProducts(

@@ -168,6 +168,8 @@ export interface MerchantListItem {
   legal_name: string
   status: string
   is_kyc_completed: boolean
+  state?: string | null
+  city?: string | null
   created_at: string
 }
 

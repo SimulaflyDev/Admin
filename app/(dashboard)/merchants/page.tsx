@@ -5,7 +5,7 @@ import Link from "next/link"
 import { Building2, Search, ShieldCheck, ShieldAlert, ArrowRight, Loader2 } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { EmptyState } from "@/components/ui/empty-state"
-import { activateMerchant, listMerchants, suspendMerchant } from "@/lib/api/directory"
+import { listMerchants } from "@/lib/api/directory"
 import type { MerchantListItem } from "@/lib/api/types"
 import { ApiError } from "@/lib/api/types"
 
@@ -36,9 +36,11 @@ export default function MerchantDirectory() {
   const [search, setSearch] = useState("")
   const [debounced, setDebounced] = useState("")
   const [status, setStatus] = useState("all")
+  const [stateFilter, setStateFilter] = useState("")
+  const [cityFilter, setCityFilter] = useState("")
+  const [sort, setSort] = useState("-created_at")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [busyId, setBusyId] = useState<string | null>(null)
 
   // Debounce the search box.
   useEffect(() => {
@@ -58,7 +60,9 @@ export default function MerchantDirectory() {
         page_size: PAGE_SIZE,
         search: debounced || undefined,
         status: status === "all" ? undefined : status,
-        sort: "-created_at",
+        state: stateFilter.trim() || undefined,
+        city: cityFilter.trim() || undefined,
+        sort,
         primary_only: true,
       })
       setMerchants(res.items)
@@ -71,26 +75,13 @@ export default function MerchantDirectory() {
     } finally {
       setLoading(false)
     }
-  }, [page, debounced, status])
+  }, [page, debounced, status, stateFilter, cityFilter, sort])
 
   useEffect(() => {
     void fetchMerchants()
   }, [fetchMerchants])
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / PAGE_SIZE)), [total])
-
-  async function toggleStatus(merchant: MerchantListItem) {
-    setBusyId(merchant.id)
-    try {
-      if (merchant.status === "suspended") await activateMerchant(merchant.id)
-      else await suspendMerchant(merchant.id)
-      await fetchMerchants()
-    } catch {
-      // surfaced via a full refetch / error banner on next load
-    } finally {
-      setBusyId(null)
-    }
-  }
 
   return (
     <div className="p-6 max-w-[1600px] mx-auto pb-24 animate-in fade-in duration-500">
@@ -107,7 +98,7 @@ export default function MerchantDirectory() {
       {/* Table Card */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
         {/* Filters */}
-        <div className="flex flex-col sm:flex-row gap-3 p-4 border-b border-slate-100 bg-slate-50/50">
+        <div className="flex flex-col lg:flex-row gap-3 p-4 border-b border-slate-100 bg-slate-50/50">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <input
@@ -127,6 +118,19 @@ export default function MerchantDirectory() {
               <SelectItem value="trial">Trial</SelectItem>
             </SelectContent>
           </Select>
+          <input value={stateFilter} onChange={(event) => { setStateFilter(event.target.value); setPage(1) }} placeholder="State" className="w-full lg:w-[140px] px-3 py-2 border border-slate-200 rounded-lg text-sm" />
+          <input value={cityFilter} onChange={(event) => { setCityFilter(event.target.value); setPage(1) }} placeholder="City" className="w-full lg:w-[140px] px-3 py-2 border border-slate-200 rounded-lg text-sm" />
+          <Select value={sort} onValueChange={(v) => { setSort(v ?? "-created_at"); setPage(1) }}>
+            <SelectTrigger className="w-full lg:w-[180px]"><SelectValue placeholder="Sort by" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="-created_at">Newest first</SelectItem>
+              <SelectItem value="created_at">Oldest first</SelectItem>
+              <SelectItem value="display_name">Name A–Z</SelectItem>
+              <SelectItem value="-display_name">Name Z–A</SelectItem>
+              <SelectItem value="state">State A–Z</SelectItem>
+              <SelectItem value="city">City A–Z</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         {error ? (
@@ -144,7 +148,7 @@ export default function MerchantDirectory() {
             title="No merchants found"
             description="No merchants match your current search criteria."
             actionLabel="Clear Search"
-            onAction={() => { setSearch(""); setStatus("all") }}
+            onAction={() => { setSearch(""); setStatus("all"); setStateFilter(""); setCityFilter(""); setSort("-created_at") }}
           />
         ) : (
           <div className="overflow-x-auto">
@@ -155,6 +159,7 @@ export default function MerchantDirectory() {
                   <th className="px-6 py-4">Shop ID</th>
                   <th className="px-6 py-4">Status</th>
                   <th className="px-6 py-4">KYC</th>
+                  <th className="px-6 py-4">Location</th>
                   <th className="px-6 py-4">Joined</th>
                   <th className="px-6 py-4 text-right">Action</th>
                 </tr>
@@ -204,24 +209,13 @@ export default function MerchantDirectory() {
                         </span>
                       )}
                     </td>
+                    <td className="px-6 py-4 text-sm text-slate-600">
+                      <div className="font-semibold text-slate-700">{merchant.city || "-"}</div>
+                      <div className="text-xs text-slate-400">{merchant.state || "Location not set"}</div>
+                    </td>
                     <td className="px-6 py-4 text-slate-500">{formatDate(merchant.created_at)}</td>
                     <td className="px-6 py-4 text-right">
                       <div className="inline-flex items-center gap-2">
-                        <button
-                          onClick={() => toggleStatus(merchant)}
-                          disabled={busyId === merchant.id}
-                          className={`inline-flex h-8 items-center justify-center rounded-lg px-3 text-xs font-bold transition-colors disabled:opacity-50 ${
-                            merchant.status === "suspended"
-                              ? "text-emerald-600 bg-emerald-50 hover:bg-emerald-100"
-                              : "text-rose-600 bg-rose-50 hover:bg-rose-100"
-                          }`}
-                        >
-                          {busyId === merchant.id
-                            ? "…"
-                            : merchant.status === "suspended"
-                            ? "Activate"
-                            : "Suspend"}
-                        </button>
                         <Link
                           href={`/merchants/${merchant.id}`}
                           className="inline-flex items-center justify-center p-2 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"

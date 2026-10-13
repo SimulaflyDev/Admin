@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Search, Store, Loader2 } from "lucide-react"
 import { EmptyState } from "@/components/ui/empty-state"
-import { listMerchants, suspendMerchant, activateMerchant } from "@/lib/api/directory"
+import { listMerchants } from "@/lib/api/directory"
 import type { MerchantListItem } from "@/lib/api/types"
 import { ApiError } from "@/lib/api/types"
 
@@ -45,9 +45,11 @@ export default function StoreDirectory() {
   const [search, setSearch] = useState("")
   const [debounced, setDebounced] = useState("")
   const [status, setStatus] = useState("all")
+  const [stateFilter, setStateFilter] = useState("")
+  const [cityFilter, setCityFilter] = useState("")
+  const [sort, setSort] = useState("-created_at")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [busyId, setBusyId] = useState<string | null>(null)
 
   // Debounce the search box.
   useEffect(() => {
@@ -67,7 +69,9 @@ export default function StoreDirectory() {
         page_size: PAGE_SIZE,
         search: debounced || undefined,
         status: status === "all" ? undefined : status,
-        sort: "-created_at",
+        state: stateFilter.trim() || undefined,
+        city: cityFilter.trim() || undefined,
+        sort,
       })
       setShops(res.items)
       setTotal(res.total)
@@ -79,26 +83,13 @@ export default function StoreDirectory() {
     } finally {
       setLoading(false)
     }
-  }, [page, debounced, status])
+  }, [page, debounced, status, stateFilter, cityFilter, sort])
 
   useEffect(() => {
     void fetchShops()
   }, [fetchShops])
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / PAGE_SIZE)), [total])
-
-  async function toggleStatus(shop: MerchantListItem) {
-    setBusyId(shop.id)
-    try {
-      if (shop.status === "suspended") await activateMerchant(shop.id)
-      else await suspendMerchant(shop.id)
-      await fetchShops()
-    } catch {
-      // surfaced via a full refetch / error banner on next load
-    } finally {
-      setBusyId(null)
-    }
-  }
 
   return (
     <div className="p-6 max-w-[1600px] mx-auto pb-24 animate-in fade-in duration-500 space-y-6">
@@ -113,7 +104,7 @@ export default function StoreDirectory() {
 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         {/* Filters */}
-        <div className="flex flex-col sm:flex-row gap-3 p-4 border-b border-slate-100">
+        <div className="flex flex-col lg:flex-row gap-3 p-4 border-b border-slate-100">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
             <Input
@@ -130,6 +121,18 @@ export default function StoreDirectory() {
               <SelectItem value="all">All Statuses</SelectItem>
               <SelectItem value="active">Active</SelectItem>
               <SelectItem value="suspended">Suspended</SelectItem>
+            </SelectContent>
+          </Select>
+          <Input value={stateFilter} onChange={(event) => { setStateFilter(event.target.value); setPage(1) }} placeholder="State" className="w-full lg:w-[140px]" />
+          <Input value={cityFilter} onChange={(event) => { setCityFilter(event.target.value); setPage(1) }} placeholder="City" className="w-full lg:w-[140px]" />
+          <Select value={sort} onValueChange={(value) => { setSort(value ?? "-created_at"); setPage(1) }}>
+            <SelectTrigger className="w-full lg:w-[180px]"><SelectValue placeholder="Sort by" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="-created_at">Newest first</SelectItem>
+              <SelectItem value="created_at">Oldest first</SelectItem>
+              <SelectItem value="display_name">Name A–Z</SelectItem>
+              <SelectItem value="state">State A–Z</SelectItem>
+              <SelectItem value="city">City A–Z</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -149,7 +152,7 @@ export default function StoreDirectory() {
             title="No shops found"
             description="No shops match your current search criteria."
             actionLabel="Clear Filters"
-            onAction={() => { setSearch(""); setStatus("all") }}
+            onAction={() => { setSearch(""); setStatus("all"); setStateFilter(""); setCityFilter(""); setSort("-created_at") }}
           />
         ) : (
           <div className="overflow-x-auto">
@@ -159,6 +162,7 @@ export default function StoreDirectory() {
                   <TableHead>Shop</TableHead>
                   <TableHead>Shop ID</TableHead>
                   <TableHead>Legal Name</TableHead>
+                  <TableHead>Location</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Action</TableHead>
@@ -177,7 +181,11 @@ export default function StoreDirectory() {
                       <div className="font-bold text-slate-700">{shop.shop_id || "—"}</div>
                       <div className="text-slate-400 mt-0.5">{shop.partner_id || ""}</div>
                     </TableCell>
-                    <TableCell className="text-sm text-slate-700">{shop.legal_name ?? "—"}</TableCell>
+                    <TableCell className="text-sm text-slate-700">{shop.legal_name ?? "-"}</TableCell>
+                    <TableCell className="text-sm text-slate-600">
+                      <div className="font-semibold text-slate-700">{shop.city || "-"}</div>
+                      <div className="text-xs text-slate-400">{shop.state || "Location not set"}</div>
+                    </TableCell>
                     <TableCell className="text-sm text-slate-500">{formatDate(shop.created_at)}</TableCell>
                     <TableCell>
                       <Badge variant="outline" className={`text-xs capitalize ${statusStyles[shop.status] ?? ""}`}>
@@ -186,17 +194,6 @@ export default function StoreDirectory() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="inline-flex items-center gap-2">
-                        <button
-                          onClick={() => toggleStatus(shop)}
-                          disabled={busyId === shop.id}
-                          className={`inline-flex h-8 items-center justify-center rounded-lg px-3 text-xs font-bold transition-colors disabled:opacity-50 ${
-                            shop.status === "suspended"
-                              ? "text-emerald-600 bg-emerald-50 hover:bg-emerald-100"
-                              : "text-rose-600 bg-rose-50 hover:bg-rose-100"
-                          }`}
-                        >
-                          {busyId === shop.id ? "…" : shop.status === "suspended" ? "Activate" : "Suspend"}
-                        </button>
                         <Link
                           href={`/merchants/${shop.id}`}
                           className="inline-flex h-8 items-center justify-center rounded-lg px-3 text-xs font-bold hover:bg-indigo-100 text-indigo-600 bg-indigo-50 transition-colors"
