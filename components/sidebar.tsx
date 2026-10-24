@@ -77,6 +77,7 @@ const allNavGroups = [
     items: [
       { href: "/support", label: "Support Center", icon: Headset, perm: "support.read" },
       { href: "/system/audit", label: "Audit Log", icon: FileCheck, perm: "audit.read" },
+      { href: "/content/home-carousel", label: "Home Carousel", icon: LayoutDashboard, perm: "content.read" },
       { href: "/settings", label: "Settings", icon: Settings, perm: "accounts.read" },
     ]
   }

@@ -29,6 +29,7 @@ export interface SupportMessage {
 
 export interface SupportTicketListItem {
   id: string
+  reference: string
   subject: string
   requester_type: string
   requester_id: string
@@ -42,6 +43,9 @@ export interface SupportTicketListItem {
 export interface SupportTicketDetail extends SupportTicketListItem {
   updated_at: string
   messages: SupportMessage[]
+  reason: string | null
+  lead_id: string | null
+  session_id: string | null
 }
 
 export interface SupportListParams {
@@ -76,7 +80,7 @@ export function getTicket(id: string): Promise<SupportTicketDetail> {
 
 export function respondTicket(
   id: string,
-  payload: { body: string }
+  payload: { body: string; client_message_id?: string }
 ): Promise<SupportTicketDetail> {
   return request<SupportTicketDetail>(`/admin/support/tickets/${id}/messages`, {
     method: "POST",

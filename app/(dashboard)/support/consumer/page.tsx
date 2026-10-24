@@ -80,7 +80,11 @@ export default function ConsumerSupportCenter() {
     }
   }, [page, debounced, status, priority])
 
-  useEffect(() => { void fetchTickets() }, [fetchTickets])
+  useEffect(() => {
+    // Intentional loading state while synchronizing changed filters with the API.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void fetchTickets()
+  }, [fetchTickets])
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / PAGE_SIZE)), [total])
 
@@ -176,7 +180,7 @@ export default function ConsumerSupportCenter() {
                 {tickets.map((ticket) => (
                   <TableRow key={ticket.id} className="hover:bg-slate-50">
                     <TableCell className="font-medium text-slate-900 text-sm">
-                      {ticket.id.slice(0, 8)}
+                      #{ticket.reference}
                       {ticket.sla_breached ? (
                         <Badge variant="outline" className="ml-2 text-[10px] font-bold uppercase bg-rose-100 text-rose-700 border-rose-200">SLA</Badge>
                       ) : null}
@@ -190,7 +194,7 @@ export default function ConsumerSupportCenter() {
                     </TableCell>
                     <TableCell className="text-sm text-slate-500">{timeAgo(ticket.created_at)}</TableCell>
                     <TableCell className="text-right">
-                      <Link href={`/support`} className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 inline-flex items-center gap-1">
+                      <Link href={`/support/consumer/${ticket.id}`} className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 inline-flex items-center gap-1">
                         Open <ArrowRight className="h-3 w-3" />
                       </Link>
                     </TableCell>
