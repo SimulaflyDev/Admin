@@ -97,6 +97,18 @@ export interface MerchantDetail {
 
 export interface MerchantKycDetail {
   completed: boolean
+  otp_verification?: {
+    method: string
+    verified_at: string
+    gstin: string
+    provider_transaction_id: string
+  } | null
+  manual_verification?: {
+    approved_at: string
+    approved_by_admin_id: string
+    approved_by_name: string
+    reason: string
+  } | null
   pan?: {
     masked_pan: string
     verified_name: string
@@ -142,6 +154,13 @@ export interface ProductDetail {
 
 export function getMerchant(id: string): Promise<MerchantDetail> {
   return request<MerchantDetail>(`/admin/merchants/${id}`)
+}
+
+export function verifyMerchantManually(id: string, reason: string): Promise<MerchantDetail> {
+  return request<MerchantDetail>(`/admin/merchants/${id}/verification`, {
+    method: "POST",
+    body: { reason },
+  })
 }
 
 export function getProduct(id: string): Promise<ProductDetail> {

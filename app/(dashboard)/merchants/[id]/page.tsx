@@ -12,6 +12,7 @@ import type { WalletTransactionItem, InvoiceListItem } from "@/lib/api/finance"
 import { listTickets } from "@/lib/api/ops"
 import type { SupportTicketListItem } from "@/lib/api/ops"
 import { ApiError } from "@/lib/api/types"
+import { ManualKycVerification } from "@/components/merchants/manual-kyc-verification"
 
 const PAGE_SIZE = 25
 
@@ -97,7 +98,7 @@ export default function MerchantProfile() {
       const response = merchant.status === "suspended"
         ? await activateMerchant(merchant.id)
         : await suspendMerchant(merchant.id)
-      setMerchant({ ...merchant, status: response.status })
+      setMerchant((current) => current ? { ...current, status: response.status } : current)
     } catch (err) {
       setStatusError(err instanceof ApiError ? err.message : "Failed to update merchant status.")
     } finally {
@@ -282,7 +283,7 @@ export default function MerchantProfile() {
         </div>
 
         <div className="p-0">
-          {activeTab === "overview" && <TabOverview merchant={merchant} storeCount={storeCount} />}
+          {activeTab === "overview" && <TabOverview merchant={merchant} storeCount={storeCount} onVerified={setMerchant} />}
           {activeTab === "stores" && <TabStores ownerUserId={ownerUserId} currentId={id} />}
           {activeTab === "wallet" && <TabWallet merchant={merchant} />}
           {activeTab === "orders" && <TabOrders />}
@@ -300,7 +301,7 @@ export default function MerchantProfile() {
 // TAB COMPONENTS
 // ─────────────────────────────────────────────────────────────────────────────
 
-function TabOverview({ merchant, storeCount }: { merchant: MerchantDetail; storeCount: number | null }) {
+function TabOverview({ merchant, storeCount, onVerified }: { merchant: MerchantDetail; storeCount: number | null; onVerified: (merchant: MerchantDetail) => void }) {
   const stats = [
     { label: "Status", value: merchant.status, icon: ShieldCheck, color: "emerald", capitalize: true },
     { label: "KYC Verified", value: merchant.is_kyc_completed ? "Yes" : "No", icon: ShieldAlert, color: "indigo" },
@@ -433,7 +434,7 @@ function TabOverview({ merchant, storeCount }: { merchant: MerchantDetail; store
         </div>
         <div className="p-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div className="rounded-xl border border-slate-200 p-4">
-            <div className="font-bold text-sm text-slate-900 mb-3">Owner PAN verification</div>
+            <div className="font-bold text-sm text-slate-900 mb-3">Business PAN verification</div>
             {merchant.kyc.pan ? (
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <KycField label="PAN" value={merchant.kyc.pan.masked_pan} mono />
@@ -441,7 +442,7 @@ function TabOverview({ merchant, storeCount }: { merchant: MerchantDetail; store
                 <KycField label="Verified name" value={merchant.kyc.pan.verified_name} wide />
                 <KycField label="Verified at" value={formatDateTime(merchant.kyc.pan.verified_at)} wide />
               </div>
-            ) : <p className="text-sm text-slate-400">PAN verification has not been completed.</p>}
+            ) : <p className="text-sm text-slate-500">{merchant.kyc.manual_verification ? "PAN approved through manual admin review." : "PAN verification has not been completed."}</p>}
           </div>
           <div className="rounded-xl border border-slate-200 p-4">
             <div className="font-bold text-sm text-slate-900 mb-3">Shop GSTIN verification</div>
@@ -454,9 +455,17 @@ function TabOverview({ merchant, storeCount }: { merchant: MerchantDetail; store
                 <KycField label="Business nature" value={merchant.kyc.gstin.business_nature || "-"} wide />
                 <KycField label="Verified at" value={formatDateTime(merchant.kyc.gstin.verified_at)} wide />
               </div>
-            ) : <p className="text-sm text-slate-400">GSTIN verification has not been completed for this shop.</p>}
+            ) : <p className="text-sm text-slate-500">{merchant.kyc.manual_verification ? "GSTIN approved through manual admin review." : "GSTIN verification has not been completed for this shop."}</p>}
           </div>
         </div>
+        {merchant.kyc.otp_verification && (
+          <div className="mx-4 mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+            <p className="font-bold">GST account OTP confirmed · linked business PAN matched</p>
+            <p className="mt-1">{merchant.kyc.otp_verification.gstin} · {formatDateTime(merchant.kyc.otp_verification.verified_at)}</p>
+            <p className="mt-1 break-all text-xs">Reference: {merchant.kyc.otp_verification.provider_transaction_id}</p>
+          </div>
+        )}
+        <ManualKycVerification merchant={merchant} onVerified={onVerified} />
       </div>
 
       <div className="border border-slate-200 rounded-xl overflow-hidden">
