@@ -79,6 +79,7 @@ const allNavGroups = [
       { href: "/system/audit", label: "Audit Log", icon: FileCheck, perm: "audit.read" },
       { href: "/content/home-carousel", label: "Home Carousel", icon: LayoutDashboard, perm: "content.read" },
       { href: "/content/shops", label: "Shops Page", icon: Store, perm: "content.read" },
+      { href: "/content/merchant-terms", label: "Merchant Terms", icon: FileText, perm: "content.read" },
       { href: "/settings", label: "Settings", icon: Settings, perm: "accounts.read" },
     ]
   }

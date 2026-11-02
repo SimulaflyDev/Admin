@@ -13,6 +13,7 @@ import { listTickets } from "@/lib/api/ops"
 import type { SupportTicketListItem } from "@/lib/api/ops"
 import { ApiError } from "@/lib/api/types"
 import { ManualKycVerification } from "@/components/merchants/manual-kyc-verification"
+import { TermsAcceptances } from "@/components/merchants/terms-acceptances"
 
 const PAGE_SIZE = 25
 
@@ -466,6 +467,7 @@ function TabOverview({ merchant, storeCount, onVerified }: { merchant: MerchantD
           </div>
         )}
         <ManualKycVerification merchant={merchant} onVerified={onVerified} />
+        <TermsAcceptances merchantId={merchant.id} />
       </div>
 
       <div className="border border-slate-200 rounded-xl overflow-hidden">
